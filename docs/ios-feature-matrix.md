@@ -2,9 +2,11 @@
 
 本表对照原项目 README、`src/components/visualizer/registry.tsx` 与 iOS 代码。代码存在、编译成功、模拟器通过、真机可用是不同状态；没有实际执行记录时，不把“已实现”当作“已验证”。本地 Windows 环境不能运行 Xcode；最终构建证据以对应 GitHub Actions 运行及其附件为准。
 
+已交付首版 `0.1.0 (8)`：[成功的 Actions 运行](https://github.com/Akiro0814/folia-major-for-iPhone/actions/runs/39086278493)，源码 `8b8e403`。50 项常规原生单测、2 项 UI 测试及独立的网易云／酷狗匿名原生搜索探针通过，横竖屏整屏截图已核对，IPA 已下载并校验。文件与 SHA-256 见[实施与验证记录](ios-implementation-status.md)。真实账号与签名设备仍未验证。
+
 | 原项目能力 / iOS 目标 | iOS 实现入口 | 当前范围与限制 |
 | --- | --- | --- |
-| 原生 iOS 26 界面、液态玻璃 | `ios/Folia/App/RootView.swift`、`Features/PlayerView.swift` | SwiftUI 系统 Tab、导航、底部附件与 glassEffect；不是 Electron 套壳。外观待模拟器截图和真机确认。 |
+| 原生 iOS 26 界面、液态玻璃 | `ios/Folia/App/RootView.swift`、`Features/PlayerView.swift` | SwiftUI 系统 Tab、导航、底部附件与 glassEffect；不是 Electron 套壳。模拟器导航和截图已验证，真机外观待确认。 |
 | 横竖屏切换、iPad | `Info.plist`、`Features/PlayerView.swift` | 系统方向声明，按可用宽高切换播放器布局；iPad 声明四方向。旋转、分屏与大字号需设备验证。 |
 | 网易云搜索、播放、歌词 | `Services/NeteaseTransport.swift`、`OmniService.swift` | 设备端加密协议与 URLSession；不包含 Node API 服务。可播放资源受账号、会员、地区和平台风控限制。 |
 | 网易云短信、密码、扫码登录 | `Services/OmniAuthentication.swift`、`Features/AccountsView.swift` | 原生流程、Keychain 会话及取消轮询；仍需真实账号验证，不能把协议测试当登录成功。 |
@@ -27,7 +29,7 @@
 | 桌面外部 Now Playing 服务、OBS、透明视频导出 | 原项目 Electron / OBS 模块 | 未移植；iOS 系统锁屏控制与“读取其他应用播放时间驱动歌词”不同。 |
 | 全局均衡器、ReplayGain 与桌面音频处理 | 原项目音频管线 | 当前原生 AVPlayer 路径未实现原项目全部 DSP；不能以系统音量或音质选择代替。 |
 | 本地音乐、文件夹扫描、标签写入、本地歌词文件 | 无 | 按需求移除。不会扫描导入本地音频，也不提供本地音频播放入口。 |
-| GitHub Actions 未签名 IPA | `.github/workflows/ios-build.yml`、`ios/Scripts/build-unsigned.sh` | 计划执行 iOS 26 模拟器 XCTest / UI 测试及 iPhoneOS arm64 构建；打包后校验 Mach-O、MinimumOSVersion、歌词资源和 SHA-256。只有工作流成功且下载真实产物后才算交付。 |
+| GitHub Actions 未签名 IPA | `.github/workflows/ios-build.yml`、`ios/Scripts/build-unsigned.sh` | build 8 已通过 iOS 26 模拟器 XCTest / UI 测试及 iPhoneOS arm64 构建；打包后校验 Mach-O、MinimumOSVersion、歌词资源和 SHA-256，已下载并通过本机复核。 |
 | 签名安装、App Store | 用户自行签名 | IPA 无开发团队签名或 embedded provisioning profile；本仓库不负责 App Store 上架。安装、后台权限和账号业务最终以用户签名后的设备验证为准。 |
 
 ## 当前明确未完成的全量迁移项
