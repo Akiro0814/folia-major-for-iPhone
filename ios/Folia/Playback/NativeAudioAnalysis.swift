@@ -6,7 +6,8 @@ import QuartzCore
 final class NativeAudioAnalysis {
     private let state = AudioTapState()
 
-    func attach(to item: AVPlayerItem) async -> Bool {
+    // AVPlayerItem and its audioMix use the playback actor; sample callbacks stay nonisolated.
+    @MainActor func attach(to item: AVPlayerItem) async -> Bool {
         if let asset = item.asset as? AVURLAsset, asset.url.pathExtension.lowercased() == "m3u8" { return false }
         do {
             let protected = try await item.asset.load(.hasProtectedContent)
@@ -74,4 +75,5 @@ private final class AudioTapState {
         return CACurrentMediaTime() - updatedAt < 1.5 ? latest : AudioAnalysisSnapshot()
     }
 }
+
 

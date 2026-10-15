@@ -25,9 +25,16 @@ final class LyricsRenderingTests: XCTestCase {
         attachScreenshot(app, name: "lyrics-landscape")
     }
     private func attachScreenshot(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        if name.hasSuffix("landscape") {
+            // Retain the element capture separately to detect XCTest orientation/cropping mismatches.
+            let element = XCTAttachment(screenshot: app.screenshot())
+            element.name = name + "-app-frame"; element.lifetime = .keepAlways; add(element)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = name + "-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        }
     }
 }

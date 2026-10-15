@@ -15,7 +15,7 @@ xcodebuild build -project "$ROOT/ios/Folia.xcodeproj" -scheme Folia \
 APP="$OUT/DerivedData/Build/Products/Release-iphoneos/Folia.app"
 test -f "$APP/Folia"
 test -f "$APP/Lyrics/index.html"
-xcrun lipo -verify_arch arm64 "$APP/Folia"
+xcrun lipo "$APP/Folia" -verify_arch arm64
 file "$APP/Folia" | tee "$OUT/executable.txt"
 STAGE="$(mktemp -d "$OUT/package.XXXXXX")"
 mkdir -p "$STAGE/Payload"

@@ -9,12 +9,14 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["搜索"].waitForExistence(timeout: 10))
         app.tabBars.buttons["搜索"].tap()
         XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5))
-        let portrait = XCTAttachment(screenshot: app.screenshot()); portrait.name = "search-portrait"; portrait.lifetime = .keepAlways; add(portrait)
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); portrait.name = "search-portrait"; portrait.lifetime = .keepAlways; add(portrait)
         XCUIDevice.shared.orientation = .landscapeLeft
         expectation(for: NSPredicate { _, _ in app.frame.width > app.frame.height }, evaluatedWith: app)
         waitForExpectations(timeout: 10)
         XCTAssertTrue(app.searchFields.firstMatch.exists)
-        let landscape = XCTAttachment(screenshot: app.screenshot()); landscape.name = "search-landscape"; landscape.lifetime = .keepAlways; add(landscape)
+        let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); landscape.name = "search-landscape"; landscape.lifetime = .keepAlways; add(landscape)
+        let appFrame = XCTAttachment(screenshot: app.screenshot()); appFrame.name = "search-landscape-app-frame"; appFrame.lifetime = .keepAlways; add(appFrame)
+        let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = "search-landscape-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
         XCUIDevice.shared.orientation = .portrait
         expectation(for: NSPredicate { _, _ in app.frame.height > app.frame.width }, evaluatedWith: app)
         waitForExpectations(timeout: 10)
@@ -32,4 +34,3 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["账户与音乐服务"].waitForExistence(timeout: 5))
     }
 }
-

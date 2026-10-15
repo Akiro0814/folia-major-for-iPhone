@@ -82,8 +82,10 @@ actor NeteaseTransport {
             if authentication != nil { pendingCookies[cookie.name] = cookie.value }
             else { session.cookies[cookie.name] = cookie.value }
         }
-        if authentication == nil, !session.cookies.isEmpty { try vault.write(session, provider: .netease) }
+        // Anonymous response cookies stay in memory; Keychain persistence requires a validated account.
+        if authentication == nil, session.account != nil, !session.cookies.isEmpty {
+            try vault.write(session, provider: .netease)
+        }
         return result
     }
 }
-
