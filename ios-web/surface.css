@@ -1,0 +1,4 @@
+/* ios-web/surface.css */
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.empty { display: grid; place-items: center; height: 100%; color: #aaa; font: 24px system-ui; }

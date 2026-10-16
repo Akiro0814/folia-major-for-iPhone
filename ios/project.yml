@@ -1,0 +1,76 @@
+# ios/project.yml
+name: Folia
+options:
+  bundleIdPrefix: io.github.L1angK1NG
+  deploymentTarget:
+    iOS: '26.0'
+  xcodeVersion: '26.0'
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    CODE_SIGNING_ALLOWED: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: targeted
+targets:
+  Folia:
+    type: application
+    platform: iOS
+    sources:
+      - path: Folia
+        excludes:
+          - Resources
+          - Info.plist
+    resources:
+      - path: Folia/Resources/Assets.xcassets
+      - path: Folia/Resources/Lyrics
+        type: folder
+      - path: ../LICENSE
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.L1angK1NG.Folia
+        PRODUCT_NAME: Folia
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Folia/Info.plist
+    dependencies:
+      - sdk: AVFoundation.framework
+      - sdk: MediaPlayer.framework
+      - sdk: WebKit.framework
+      - sdk: Security.framework
+  FoliaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [FoliaTests]
+    dependencies:
+      - target: Folia
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  FoliaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [FoliaUITests]
+    dependencies:
+      - target: Folia
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Folia:
+    build:
+      targets:
+        Folia: all
+        FoliaTests: [test]
+        FoliaUITests: [test]
+    test:
+      gatherCoverageData: true
+      targets: [FoliaTests, FoliaUITests]
+    run:
+      config: Debug
+    archive:
+      config: Release

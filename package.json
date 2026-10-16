@@ -57,7 +57,9 @@
     "contributors:add": "npx all-contributors-cli add",
     "contributors:generate": "npx all-contributors-cli generate",
     "models:fetch": "node build/fetchModels.mjs",
-    "manual:ai-probe": "node test/manual/ai_probe.mjs"
+    "manual:ai-probe": "node test/manual/ai_probe.mjs",
+    "build:ios-lyrics": "vite build --config ios-web/vite.config.ts",
+    "test:ios-bridge": "node --test ios-web/bridge.test.mjs"
   },
   "build": {
     "appId": "top.izuna.foliamajor",

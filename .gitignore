@@ -91,3 +91,8 @@ __pycache__/
 
 # Built by build/buildPythonRuntime.mjs - binary artifacts that live on the mirrors, not in git.
 dist-runtime/
+
+# Generated Apple project, bundled lyrics and local build artifacts.
+ios/Folia.xcodeproj/
+ios/Folia/Resources/Lyrics/
+artifacts/
