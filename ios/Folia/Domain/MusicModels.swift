@@ -2,9 +2,9 @@ import Foundation
 // ios/Folia/Domain/MusicModels.swift
 
 enum MusicProvider: String, Codable, CaseIterable, Identifiable, Sendable {
-    case netease, kugou, qq
+    case netease, kugou, qq, navidrome
     var id: String { rawValue }
-    var title: String { switch self { case .netease: "网易云音乐"; case .kugou: "酷狗音乐"; case .qq: "QQ 音乐" } }
+    var title: String { switch self { case .netease: "网易云音乐"; case .kugou: "酷狗音乐"; case .qq: "QQ 音乐"; case .navidrome: "Navidrome" } }
 }
 enum AudioQuality: String, Codable, CaseIterable, Sendable { case standard, high, lossless }
 enum LoginMethod: String, CaseIterable, Sendable { case sms, password, qr }
@@ -38,7 +38,7 @@ struct LyricsPayload: Codable, Sendable {
     var romanization: String = ""
     var wordTimed: String = ""
 }
-struct QRLogin: Sendable { var key: String; var url: URL }
+struct QRLogin: Sendable { var key: String; var url: URL; var imageURL: URL? = nil }
 enum QRLoginStatus: Sendable { case waiting, scanned, expired, authorized(MusicAccount) }
 enum MusicError: LocalizedError, Sendable {
     case unsupported(String), authenticationRequired, unavailable(String), invalidResponse, server(Int, String), sessionChanged
@@ -52,3 +52,5 @@ enum MusicError: LocalizedError, Sendable {
         }
     }
 }
+
+

@@ -18,6 +18,7 @@ import Observation
     var tracks: [Track] = []
     var currentTrack: Track?
     var lyrics: LyricsPayload?
+    var lyricsError: String?
     var currentTime: Double = 0
     var duration: Double = 0
     var isPlaying = false
@@ -26,7 +27,9 @@ import Observation
     var sleepDeadline: Date?
     var repeatMode: RepeatMode = .off { didSet { queueState.repeatMode = repeatMode; persist() } }
     var shuffle = false { didSet { queueState.shuffle = shuffle; persist() } }
-    var quality: AudioQuality = .high
+    var quality: AudioQuality = AudioQuality(rawValue: UserDefaults.standard.string(forKey: "folia.quality") ?? "") ?? .high {
+        didSet { UserDefaults.standard.set(quality.rawValue, forKey: "folia.quality") }
+    }
 
     init(service: OmniService) {
         self.service = service
@@ -68,9 +71,9 @@ import Observation
 
     // Each stream/lyric resolution belongs to a generation; a late response cannot replace a newer song.
     private func load(_ track: Track, position: Double, retry: Bool = false) {
-        loadTask?.cancel(); player.pause()
+        loadTask?.cancel(); player.pause(); statusObservation = nil; player.replaceCurrentItem(with: nil)
         generation = UUID(); let request = generation
-        currentTrack = track; lyrics = nil; currentTime = position; duration = track.duration
+        currentTrack = track; lyrics = nil; lyricsError = nil; currentTime = position; duration = track.duration
         isPlaying = false; isLoading = true; error = nil; retriedStream = retry
         loadTask = Task { [weak self] in
             guard let self else { return }
@@ -94,7 +97,9 @@ import Observation
                 do {
                     let payload = try await service.lyrics(for: track)
                     try Task.checkCancellation(); guard generation == request else { return }; lyrics = payload
-                } catch { /* Audio remains available if the provider has no lyrics. */ }
+                } catch {
+                    if generation == request && !Task.isCancelled { lyricsError = "\(track.provider.title): \(error.localizedDescription)" }
+                }
             } catch is CancellationError { } catch {
                 guard generation == request else { return }
                 self.error = error.localizedDescription; isLoading = false; isPlaying = false
@@ -103,6 +108,7 @@ import Observation
     }
 
     func toggle() {
+        guard !isLoading else { return }
         if player.currentItem == nil, let track = currentTrack { load(track, position: currentTime); return }
         if isPlaying { player.pause(); isPlaying = false } else { try? AVAudioSession.sharedInstance().setActive(true); player.play(); isPlaying = true }
         persist(); updateNowPlaying()
@@ -168,6 +174,8 @@ import Observation
         repeatMode = savedRepeat; shuffle = savedShuffle
     }
 }
+
+
 
 
 

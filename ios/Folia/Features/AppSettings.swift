@@ -9,6 +9,7 @@ struct VisualSettings: Codable, Equatable {
     var showRomanization = false
     var lyricOffset: Double = 0
     var fontSize: Double = 36
+    var themeColors: [String]? = nil
 }
 
 @MainActor @Observable final class AppSettings {
@@ -53,10 +54,11 @@ struct VisualSettingsDocument: FileDocument {
 
 extension MusicProvider {
     var displayName: String {
-        switch self { case .netease: "网易云音乐"; case .kugou: "酷狗音乐"; case .qq: "QQ 音乐" }
+        switch self { case .netease: "网易云音乐"; case .kugou: "酷狗音乐"; case .qq: "QQ 音乐"; case .navidrome: "Navidrome" }
     }
 }
 
 func localized(_ chinese: String, _ english: String) -> String {
     Locale.preferredLanguages.first?.hasPrefix("zh") == true ? chinese : english
 }
+

@@ -15,13 +15,13 @@ struct PlayerView: View {
             Group {
                 if landscape {
                     HStack(spacing: 24) {
-                        controls.frame(width: max(240, geometry.size.width * 0.38))
+                        ScrollView { controls(compact: true) }.frame(width: max(240, geometry.size.width * 0.38))
                         lyricStage
                     }
                 } else {
                     ScrollView {
                         VStack(spacing: 28) {
-                            controls
+                            controls()
                             lyricStage.frame(height: max(300, geometry.size.height * 0.48))
                         }
                     }
@@ -45,11 +45,13 @@ struct PlayerView: View {
             .clipShape(.rect(cornerRadius: 24))
             .accessibilityLabel(localized("动态歌词", "Animated lyrics"))
     }
-    private var controls: some View {
-        VStack(spacing: 20) {
+    private func controls(compact: Bool = false) -> some View {
+        VStack(spacing: compact ? 12 : 20) {
             if let track = playback.currentTrack {
-                ArtworkView(url: track.artworkURL).aspectRatio(1, contentMode: .fit).frame(maxWidth: 340, maxHeight: 340)
-                    .clipShape(.rect(cornerRadius: 20))
+                if !compact {
+                    ArtworkView(url: track.artworkURL).aspectRatio(1, contentMode: .fit).frame(maxWidth: 340, maxHeight: 340)
+                        .clipShape(.rect(cornerRadius: 20))
+                }
                 HStack {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(track.title).font(.title2.weight(.bold)).lineLimit(2)
@@ -118,4 +120,6 @@ struct QueueView: View {
         }
     }
 }
+
+
 

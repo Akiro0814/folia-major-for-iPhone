@@ -58,7 +58,7 @@
     "contributors:generate": "npx all-contributors-cli generate",
     "models:fetch": "node build/fetchModels.mjs",
     "manual:ai-probe": "node test/manual/ai_probe.mjs",
-    "build:ios-lyrics": "vite build --config ios-web/vite.config.ts",
+    "build:ios-lyrics": "node ios/Scripts/generate-visualizers.mjs && vite build --config ios-web/vite.config.ts",
     "test:ios-bridge": "node --test ios-web/bridge.test.mjs"
   },
   "build": {

@@ -23,11 +23,15 @@ targets:
         excludes:
           - Resources
           - Info.plist
-    resources:
       - path: Folia/Resources/Assets.xcassets
+        buildPhase: resources
       - path: Folia/Resources/Lyrics
         type: folder
+        buildPhase: resources
+      - path: Folia/Resources/visualizers.json
+        buildPhase: resources
       - path: ../LICENSE
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.L1angK1NG.Folia

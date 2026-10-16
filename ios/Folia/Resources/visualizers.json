@@ -1,0 +1,58 @@
+[
+  {
+    "mode": "cadenza",
+    "label": "Mindscape"
+  },
+  {
+    "mode": "cappella",
+    "label": "Cappella"
+  },
+  {
+    "mode": "claddagh",
+    "label": "Claddagh"
+  },
+  {
+    "mode": "classic",
+    "label": "Luminous"
+  },
+  {
+    "mode": "diorama",
+    "label": "镜台"
+  },
+  {
+    "mode": "fume",
+    "label": "Fume"
+  },
+  {
+    "mode": "lumiere",
+    "label": "绘光"
+  },
+  {
+    "mode": "monet",
+    "label": "Monet"
+  },
+  {
+    "mode": "partita",
+    "label": "云阶"
+  },
+  {
+    "mode": "pendolo",
+    "label": "Pendolo"
+  },
+  {
+    "mode": "sonnet",
+    "label": "商籁"
+  },
+  {
+    "mode": "still",
+    "label": "Still"
+  },
+  {
+    "mode": "tempera",
+    "label": "Tempera"
+  },
+  {
+    "mode": "tilt",
+    "label": "Tilt"
+  }
+]

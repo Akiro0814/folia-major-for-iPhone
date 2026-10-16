@@ -4,20 +4,27 @@ import Foundation
 actor OmniService {
     let netease = NeteaseTransport()
     let discovery = PublicDiscoveryTransport()
-    func loginMethods(provider: MusicProvider) -> [LoginMethod] { provider == .netease ? [.sms, .password, .qr] : [] }
+    let navidrome = NavidromeProvider()
+    func loginMethods(provider: MusicProvider) -> [LoginMethod] { [MusicProvider.netease, .kugou].contains(provider) ? [.sms, .password, .qr] : [] }
     func account(provider: MusicProvider) async -> MusicAccount? {
-        provider == .netease ? await netease.account() : nil
+        if provider == .navidrome { return await navidrome.account() }
+        if provider == .kugou { return await discovery.kugouAccount() }
+        return provider == .netease ? await netease.account() : nil
     }
     func logout(provider: MusicProvider) async throws {
+        if provider == .navidrome { try await navidrome.logout(); return }
+        if provider == .kugou { try await discovery.logoutKugou(); return }
         if provider == .netease { try await netease.logout() }
     }
     func search(_ query: String, provider: MusicProvider) async throws -> [Track] {
+        if provider == .navidrome { return try await navidrome.search(query) }
         if provider != .netease { return try await discovery.search(query, provider: provider) }
         let result = try await netease.request("/api/search/get", ["s": query, "type": 1, "limit": 50, "offset": 0])
         let songs = (result["result"] as? [String: Any])?["songs"] as? [[String: Any]] ?? []
         return songs.compactMap(Self.normalizeNetease)
     }
     func stream(for track: Track, quality: AudioQuality = .high) async throws -> AudioSource {
+        if track.provider == .navidrome { return try await navidrome.stream(for: track, quality: quality) }
         if track.provider != .netease { return try await discovery.stream(track, quality: quality) }
         let bitrate = quality == .standard ? 128000 : quality == .high ? 320000 : 999000
         let result = try await netease.request("/api/song/enhance/player/url", ["ids": "[\(track.mediaID)]", "br": bitrate])
@@ -28,12 +35,14 @@ actor OmniService {
         return AudioSource(url: url, expiresAt: Date().addingTimeInterval((entry["expi"] as? Double) ?? 600))
     }
     func lyrics(for track: Track) async throws -> LyricsPayload {
+        if track.provider == .navidrome { return try await navidrome.lyrics(for: track) }
         if track.provider != .netease { return try await discovery.lyrics(track) }
         let result = try await netease.request("/api/song/lyric", ["id": track.mediaID, "tv": -1, "lv": -1, "rv": -1, "kv": -1, "_nmclfl": 1])
         return LyricsPayload(original: Self.lyricField(result, "lrc"), translation: Self.lyricField(result, "tlyric"),
                              romanization: Self.lyricField(result, "romalrc"), wordTimed: Self.lyricField(result, "yrc"))
     }
     func playlists(provider: MusicProvider) async throws -> [MusicCollection] {
+        if provider == .navidrome { return try await navidrome.playlists() }
         try requireNetease(provider)
         guard let user = await netease.account() else { throw MusicError.authenticationRequired }
         let result = try await netease.request("/api/user/playlist", ["uid": user.id, "limit": 1000, "offset": 0, "includeVideo": true])
@@ -44,6 +53,7 @@ actor OmniService {
         }
     }
     func tracks(in collection: MusicCollection) async throws -> [Track] {
+        if collection.provider == .navidrome { return try await navidrome.tracks(in: collection) }
         try requireNetease(collection.provider)
         let result = try await netease.request("/api/v6/playlist/detail", ["id": collection.id, "n": 100000, "s": 8])
         guard let playlist = result["playlist"] as? [String: Any] else { throw MusicError.invalidResponse }
@@ -61,11 +71,13 @@ actor OmniService {
         return ids.compactMap { map[$0] }
     }
     func setLiked(_ liked: Bool, track: Track) async throws {
+        if track.provider == .navidrome { try await navidrome.setLiked(liked, track: track); return }
         try requireNetease(track.provider)
         guard await netease.account() != nil else { throw MusicError.authenticationRequired }
         _ = try await netease.request("/api/radio/like", ["trackId": track.mediaID, "like": liked, "alg": "itembased", "time": 3])
     }
     func changePlaylist(_ collection: MusicCollection, track: Track, add: Bool) async throws {
+        if collection.provider == .navidrome { try await navidrome.changePlaylist(collection, track: track, add: add); return }
         guard collection.provider == track.provider else { throw MusicError.unsupported("歌曲与歌单必须来自同一音乐平台。") }
         try requireNetease(track.provider)
         guard await netease.account() != nil else { throw MusicError.authenticationRequired }
@@ -74,6 +86,7 @@ actor OmniService {
             "trackIds": String(decoding: ids, as: UTF8.self), "imme": "true"])
     }
     func recommendations(provider: MusicProvider) async throws -> [Track] {
+        if provider == .navidrome { return try await navidrome.recommendations() }
         try requireNetease(provider)
         guard await netease.account() != nil else { throw MusicError.authenticationRequired }
         let result = try await netease.request("/api/v3/discovery/recommend/songs")
@@ -100,4 +113,5 @@ actor OmniService {
         (result[field] as? [String: Any])?["lyric"] as? String ?? ""
     }
 }
+
 

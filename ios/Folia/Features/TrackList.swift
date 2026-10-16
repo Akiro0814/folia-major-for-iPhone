@@ -15,6 +15,8 @@ struct TrackRows: View {
     @Environment(PlaybackCoordinator.self) private var playback
     @Environment(AppSettings.self) private var settings
     @State private var actionError: String?
+    @State private var playlistTrack: Track?
+    @State private var addingToPlaylist = true
     var body: some View {
         ForEach(tracks) { track in
             Button { playback.play(track, in: tracks) } label: {
@@ -34,9 +36,15 @@ struct TrackRows: View {
                 Button(localized("喜欢（同步到平台）", "Like on provider"), systemImage: "heart.circle") {
                     Task { do { try await playback.service.setLiked(true, track: track) } catch { actionError = error.localizedDescription } }
                 }
+                Button(localized("取消平台喜欢", "Unlike on provider"), systemImage: "heart.slash") {
+                    Task { do { try await playback.service.setLiked(false, track: track) } catch { actionError = error.localizedDescription } }
+                }
+                Button(localized("添加到歌单", "Add to playlist"), systemImage: "text.badge.plus") { addingToPlaylist = true; playlistTrack = track }
+                Button(localized("从歌单移除", "Remove from playlist"), systemImage: "text.badge.minus") { addingToPlaylist = false; playlistTrack = track }
                 if let url = track.artworkURL { ShareLink(item: url) { Label(localized("分享封面", "Share artwork"), systemImage: "square.and.arrow.up") } }
             }
         }
+        .sheet(item: $playlistTrack) { PlaylistActionView(track: $0, add: addingToPlaylist) }
         .alert(localized("平台操作失败", "Provider action failed"), isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
             Button(localized("好", "OK")) { actionError = nil }
         } message: { Text(actionError ?? "") }
@@ -84,6 +92,8 @@ struct LibraryView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(PlaybackCoordinator.self) private var playback
     @State private var collections: [MusicCollection] = []
+    @State private var recommendations: [Track] = []
+    @State private var recommendationError: String?
     @State private var error: String?
     var body: some View {
         @Bindable var settings = settings
@@ -92,6 +102,10 @@ struct LibraryView: View {
                 Picker(localized("音乐平台", "Provider"), selection: $settings.preferredProvider) {
                     ForEach(MusicProvider.allCases) { Text($0.displayName).tag($0) }
                 }
+            }
+            Section(localized("为你推荐", "For you")) {
+                if let recommendationError { Text(recommendationError).font(.caption).foregroundStyle(.secondary) }
+                TrackRows(tracks: Array(recommendations.prefix(20)))
             }
             Section(localized("设备收藏", "Device favorites")) {
                 if settings.favorites.isEmpty { Text(localized("长按歌曲即可收藏", "Touch and hold a song to favorite it")).foregroundStyle(.secondary) }
@@ -115,9 +129,11 @@ struct LibraryView: View {
         .refreshable { await load() }
     }
     private func load() async {
-        error = nil; collections = []
+        error = nil; collections = []; recommendations = []; recommendationError = nil
         do { let result = try await playback.service.playlists(provider: settings.preferredProvider); try Task.checkCancellation(); collections = result }
         catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+        do { let result = try await playback.service.recommendations(provider: settings.preferredProvider); try Task.checkCancellation(); recommendations = result }
+        catch { if !Task.isCancelled { recommendationError = error.localizedDescription } }
     }
 }
 
@@ -135,4 +151,5 @@ struct CollectionView: View {
             }
     }
 }
+
 

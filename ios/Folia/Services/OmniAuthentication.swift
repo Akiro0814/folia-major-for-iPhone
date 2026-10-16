@@ -2,11 +2,16 @@ import Foundation
 // ios/Folia/Services/OmniAuthentication.swift
 
 extension OmniService {
+    func configureNavidrome(serverURL: String, username: String, password: String) async throws {
+        try await navidrome.configure(serverURL: serverURL, username: username, password: password)
+    }
     func sendCode(phone: String, provider: MusicProvider) async throws {
+        if provider == .kugou { try await discovery.sendKugouCode(phone: phone); return }
         try requireNetease(provider)
         _ = try await netease.request("/api/sms/captcha/sent", ["cellphone": phone, "ctcode": "86", "secrete": "music_middleuser_pclogin"])
     }
     func login(phone: String, credential: String, method: LoginMethod, provider: MusicProvider) async throws -> MusicAccount {
+        if provider == .kugou { return try await discovery.loginKugou(phone: phone, credential: credential, method: method) }
         try requireNetease(provider)
         guard method != .qr else { throw MusicError.unsupported("请使用扫码登录流程。") }
         var parameters: [String: Any] = ["type": "1", "https": "true", "phone": phone,
@@ -16,6 +21,7 @@ extension OmniService {
         return try await establishAccount(response)
     }
     func startQR(provider: MusicProvider) async throws -> QRLogin {
+        if provider == .kugou { return try await discovery.startKugouQR() }
         try requireNetease(provider)
         let result = try await netease.request("/api/login/qrcode/unikey", ["type": 3])
         guard let key = result["unikey"] as? String,
@@ -23,6 +29,7 @@ extension OmniService {
         return QRLogin(key: key, url: url)
     }
     func pollQR(_ login: QRLogin, provider: MusicProvider) async throws -> QRLoginStatus {
+        if provider == .kugou { return try await discovery.pollKugouQR(login) }
         try requireNetease(provider)
         let result = try await netease.request("/api/login/qrcode/client/login", ["key": login.key, "type": 3], codes: [200, 800, 801, 802, 803])
         switch result["code"] as? Int {
@@ -48,4 +55,5 @@ extension OmniService {
         return account
     }
 }
+
 

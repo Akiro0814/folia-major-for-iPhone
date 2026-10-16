@@ -52,6 +52,11 @@ function LyricsSurface() {
   }, [state?.lyrics]);
   const latestLines = useRef(lines);
   latestLines.current = lines;
+  useEffect(() => {
+    if (!state) return;
+    const frame = requestAnimationFrame(() => native()?.postMessage({ type: 'rendered', version: 1 }));
+    return () => cancelAnimationFrame(frame);
+  }, [state?.generation, state?.settings.renderer]);
 
   useEffect(() => {
     (window as any).foliaReceive = (next: Snapshot) => {

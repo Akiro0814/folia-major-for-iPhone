@@ -24,6 +24,9 @@ struct LoginView: View {
     @State private var qrGeneration = 0
 
     var body: some View {
+        if provider == .navidrome { NavidromeLoginView() } else { standardForm }
+    }
+    private var standardForm: some View {
         Form {
             if let account {
                 Section { Label(account.nickname, systemImage: "person.crop.circle.fill")
@@ -84,11 +87,12 @@ struct LoginView: View {
         .onDisappear { credential = "" }
     }
     private func methodTitle(_ method: LoginMethod) -> String {
-        switch method { case .sms: localized("短信验证码", "SMS code"); case .password: localized("账号密码", "Password"); case .qr: localized("扫码授权", "QR authorization") }
+        switch method { case .sms: localized("短信验证码", "SMS code"); case .password: localized("账号密码", "Password"); case .qr: provider == .qq ? localized("微信扫码", "WeChat QR") : localized("扫码授权", "QR authorization") }
     }
     private func perform(_ operation: @escaping @MainActor () async throws -> Void) {
         busy = true; message = nil
         Task { do { try await operation() } catch { message = error.localizedDescription }; busy = false }
     }
 }
+
 

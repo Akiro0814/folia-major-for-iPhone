@@ -4,7 +4,10 @@ import Foundation
 actor PublicDiscoveryTransport {
     private let network: URLSession
     private let mid: String
+    var kugouSession: ProviderSession
+    var generation = 0
     init() {
+        kugouSession = (try? SessionVault().read(.kugou)) ?? ProviderSession()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 25
         network = URLSession(configuration: config)
@@ -58,14 +61,24 @@ actor PublicDiscoveryTransport {
     }
     // KuGouMusicApi 1.6.0 android signature includes sorted unescaped values and exact body bytes.
     func kugou(_ path: String, params: [String: String], router: String? = nil,
-               base: String = "https://gateway.kugou.com", defaults: Bool = true) async throws -> [String: Any] {
+               base: String = "https://gateway.kugou.com", defaults: Bool = true, web: Bool = false,
+               body: [String: Any]? = nil) async throws -> [String: Any] {
         let time = String(Int(Date().timeIntervalSince1970))
         var fields = defaults ? ["dfid": "-", "mid": mid, "uuid": "-", "appid": "1005", "clientver": "20489", "clienttime": time] : [:]
         fields.merge(params) { _, new in new }
-        fields["signature"] = Self.kugouSignature(fields)
+        if let token = kugouSession.cookies["token"] { fields["token"] = token }
+        if let userid = kugouSession.cookies["userid"] { fields["userid"] = userid }
+        let encodedBody = try body.map { try JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
+        let bodyText = encodedBody.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        fields["signature"] = Self.kugouSignature(fields, body: bodyText, web: web)
         var components = URLComponents(string: base + path)!
         components.queryItems = fields.sorted(by: { $0.key < $1.key }).map { URLQueryItem(name: $0.key, value: $0.value) }
         var request = URLRequest(url: components.url!)
+        if let encodedBody {
+            request.httpMethod = "POST"
+            request.httpBody = encodedBody
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         request.setValue(router, forHTTPHeaderField: "x-router")
         request.setValue(mid, forHTTPHeaderField: "mid")
         request.setValue("-", forHTTPHeaderField: "dfid")
@@ -74,16 +87,18 @@ actor PublicDiscoveryTransport {
         request.setValue("5d816a0", forHTTPHeaderField: "kg-thash")
         request.setValue("1", forHTTPHeaderField: "kg-rec")
         request.setValue("B9EDA08A64250DEFFBCADDEE00F8F25F", forHTTPHeaderField: "kg-rf")
+        let captured = generation
         let result = try await send(request)
+        guard captured == generation else { throw MusicError.sessionChanged }
         if let status = result["status"] as? Int, status == 0 {
             throw MusicError.server(result["error_code"] as? Int ?? result["errcode"] as? Int ?? -1,
                 result["error"] as? String ?? result["message"] as? String ?? "酷狗拒绝了请求")
         }
         return result
     }
-    nonisolated static func kugouSignature(_ params: [String: String]) -> String {
-        let salt = "OIlwieks28dk2k092lksi2UIkp"
-        return ProtocolCrypto.md5(salt + params.sorted(by: { $0.key < $1.key }).map { "\($0.key)=\($0.value)" }.joined() + salt)
+    nonisolated static func kugouSignature(_ params: [String: String], body: String = "", web: Bool = false) -> String {
+        let salt = web ? "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt" : "OIlwieks28dk2k092lksi2UIkp"
+        return ProtocolCrypto.md5(salt + params.sorted(by: { $0.key < $1.key }).map { "\($0.key)=\($0.value)" }.joined() + (web ? "" : body) + salt)
     }
     private func searchQQ(_ query: String) async throws -> [Track] {
         let body: [String: Any] = ["comm": ["ct": 11, "cv": "1003006", "v": "1003006", "tmeAppID": "qqmusiclight",
@@ -122,3 +137,4 @@ actor PublicDiscoveryTransport {
         return value
     }
 }
+

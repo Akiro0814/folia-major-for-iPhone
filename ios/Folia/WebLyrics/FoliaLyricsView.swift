@@ -9,6 +9,7 @@ struct FoliaLyricsView: View {
     var isPlaying: Bool
     var settings: VisualSettings
     var onSeek: ((Double) -> Void)? = nil
+    var onReadiness: ((Bool) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -18,7 +19,7 @@ struct FoliaLyricsView: View {
         ZStack {
             LyricsWebSurface(track: track, lyrics: lyrics, currentTime: currentTime, isPlaying: isPlaying,
                 settings: settings, daylight: colorScheme == .light, reduceMotion: reduceMotion,
-                visible: scenePhase == .active, onSeek: onSeek, failure: $failure)
+                visible: scenePhase == .active, onSeek: onSeek, onReadiness: onReadiness, failure: $failure)
                 .accessibilityHidden(true)
             if failure != nil {
                 ScrollView {
@@ -45,6 +46,7 @@ private struct LyricsWebSurface: UIViewRepresentable {
     var reduceMotion: Bool
     var visible: Bool
     var onSeek: ((Double) -> Void)?
+    var onReadiness: ((Bool) -> Void)?
     @Binding var failure: String?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -101,9 +103,14 @@ private struct LyricsWebSurface: UIViewRepresentable {
                 "settings": (try? JSONSerialization.jsonObject(with: settingsData)) ?? [:],
                 "daylight": parent.daylight, "reduceMotion": parent.reduceMotion,
             ]
-            webView.callAsyncJavaScript("window.foliaReceive(payload)", arguments: ["payload": payload],
-                in: nil, contentWorld: .page) { [weak self] result in
-                if case .failure = result { self?.parent.failure = "Lyrics bridge failed" }
+            Task { [weak self, weak webView] in
+                do {
+                    _ = try await webView?.callAsyncJavaScript("window.foliaReceive(payload)", arguments: ["payload": payload],
+                        in: nil, contentWorld: .page)
+                } catch {
+                    self?.parent.failure = "Lyrics bridge failed"
+                    self?.parent.onReadiness?(false)
+                }
             }
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -111,16 +118,17 @@ private struct LyricsWebSurface: UIViewRepresentable {
                   let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
             switch type {
             case "ready": ready = true; parent.failure = nil; sendSnapshot()
-            case "error": parent.failure = body["message"] as? String ?? "Lyrics unavailable"
+            case "rendered": parent.onReadiness?(true)
+            case "error": parent.failure = body["message"] as? String ?? "Lyrics unavailable"; parent.onReadiness?(false)
             case "seek":
                 if let time = body["time"] as? Double, time.isFinite, time >= 0 { parent.onSeek?(time) }
             default: break
             }
         }
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { parent.failure = error.localizedDescription }
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { parent.failure = error.localizedDescription }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { parent.failure = error.localizedDescription; parent.onReadiness?(false) }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { parent.failure = error.localizedDescription; parent.onReadiness?(false) }
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            ready = false; parent.failure = "Lyrics renderer restarted"; webView.reload()
+            ready = false; parent.failure = "Lyrics renderer restarted"; parent.onReadiness?(false); webView.reload()
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

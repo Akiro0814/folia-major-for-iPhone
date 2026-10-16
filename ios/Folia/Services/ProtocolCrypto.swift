@@ -16,12 +16,13 @@ enum ProtocolCrypto {
         var written = 0
         let options = CCOptions(kCCOptionPKCS7Padding | (iv == nil ? kCCOptionECBMode : 0))
         let vector = iv.map { Array($0.utf8) } ?? [UInt8](repeating: 0, count: 16)
+        let capacity = output.count
         let status = input.withUnsafeBytes { source in
             secret.withUnsafeBytes { secretBuffer in
                 vector.withUnsafeBytes { ivBuffer in
                     CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES), options,
                             secretBuffer.baseAddress, secret.count, ivBuffer.baseAddress,
-                            source.baseAddress, input.count, &output, output.count, &written)
+                            source.baseAddress, input.count, &output, capacity, &written)
                 }
             }
         }
@@ -55,3 +56,4 @@ enum ProtocolCrypto {
         return ["params": encrypted, "encSecKey": rsa.map { String(format: "%02x", $0) }.joined()]
     }
 }
+

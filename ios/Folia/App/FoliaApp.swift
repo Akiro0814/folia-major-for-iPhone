@@ -7,10 +7,14 @@ import SwiftUI
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            Group {
+                if ProcessInfo.processInfo.arguments.contains("--lyrics-validation") { LyricsValidationView() }
+                else { RootView() }
+            }
                 .environment(settings)
                 .environment(playback)
                 .tint(Color(red: 0.25, green: 0.47, blue: 0.37))
         }
     }
 }
+
