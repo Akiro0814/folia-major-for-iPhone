@@ -41,9 +41,11 @@ struct PlayerView: View {
         .sheet(isPresented: $showQueue) { QueueView() }
     }
     private var lyricStage: some View {
-        FoliaLyricsView(track: playback.currentTrack, lyrics: playback.lyrics, currentTime: playback.currentTime, isPlaying: playback.isPlaying, settings: settings.visual, onSeek: { playback.seek(to: $0) })
+        VStack(spacing: 8) {
+            if let lyricsError = playback.lyricsError { Text(lyricsError).font(.caption).foregroundStyle(.secondary).accessibilityLabel(localized("歌词请求失败", "Lyrics request failed") + ": " + lyricsError) }
+            FoliaLyricsView(track: playback.currentTrack, lyrics: playback.lyrics, currentTime: playback.currentTime, isPlaying: playback.isPlaying, settings: settings.visual, onSeek: { playback.seek(to: $0) })
             .clipShape(.rect(cornerRadius: 24))
-            .accessibilityLabel(localized("动态歌词", "Animated lyrics"))
+        }
     }
     private func controls(compact: Bool = false) -> some View {
         VStack(spacing: compact ? 12 : 20) {
@@ -120,6 +122,7 @@ struct QueueView: View {
         }
     }
 }
+
 
 
 

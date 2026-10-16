@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import type { Theme, Word as WordType } from '../../types';
 import { buildWordGraphemeTimings } from '../../utils/lyrics/graphemeTiming';
@@ -40,10 +40,18 @@ export const GlowWord = <TConfig extends { id: string }>({
     fontSize,
     layoutStyle,
 }: GlowWordProps<TConfig>) => {
-    const [status, setStatus] = useState<'waiting' | 'active' | 'passed'>('waiting');
     const rippleScale = useMemo(() => 1.5 + Math.random() * 2, []);
     const duration = getGlowWordDisplayDuration(word, renderProfile);
     const activeEndTime = getGlowWordActiveEndTime(word, renderProfile);
+    const resolveStatus = (time: number): 'waiting' | 'active' | 'passed' => (
+        time >= word.startTime - renderProfile.wordLookahead && time <= activeEndTime
+            ? 'active' : time > activeEndTime ? 'passed' : 'waiting'
+    );
+    // A paused or freshly mounted renderer may never receive a clock change event.
+    const [status, setStatus] = useState(() => resolveStatus(currentTime.get()));
+    useEffect(() => {
+        setStatus(resolveStatus(currentTime.get()));
+    }, [currentTime, word.startTime, activeEndTime, renderProfile.wordLookahead]);
     const graphemeTimings = useMemo(() => buildWordGraphemeTimings(word), [word]);
 
     /* eslint-disable-next-line no-warning-comments -- @AI: KEEP THIS EXACTLY AS IS */

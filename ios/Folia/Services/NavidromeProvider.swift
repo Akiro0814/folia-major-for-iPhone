@@ -169,6 +169,8 @@ actor NavidromeProvider {
         parts.path = parts.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         parts.path = (parts.path.isEmpty ? "" : "/" + parts.path) + "/rest/" + endpoint
         parts.queryItems = [.init(name: "u", value: configuration.username), .init(name: "t", value: ProtocolCrypto.md5(configuration.password + salt)), .init(name: "s", value: salt), .init(name: "v", value: "1.16.1"), .init(name: "c", value: "Folia"), .init(name: "f", value: "json")] + parameters
+        // Subsonic query decoders treat raw + as space; preserve literal plus in usernames and searches.
+        parts.percentEncodedQuery = parts.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         guard let url = parts.url else { throw MusicError.invalidResponse }; return url
     }
     private func songs(_ value: Any?, configuration: NavidromeConfiguration) throws -> [Track] {

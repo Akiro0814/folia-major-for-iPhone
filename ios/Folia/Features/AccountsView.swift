@@ -40,7 +40,7 @@ struct LoginView: View {
                 }
                 if method == .qr {
                     Section {
-                        if let qr { QRCodeView(url: qr.url)
+                        if let qr { QRCodeView(url: qr.url, imageURL: qr.imageURL)
                             ShareLink(item: qr.url) { Label(localized("打开或分享授权链接", "Open or share authorization"), systemImage: "qrcode") }
                             Link(localized("在浏览器中授权", "Authorize in browser"), destination: qr.url)
                         }
@@ -94,5 +94,6 @@ struct LoginView: View {
         Task { do { try await operation() } catch { message = error.localizedDescription }; busy = false }
     }
 }
+
 
 

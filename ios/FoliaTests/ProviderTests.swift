@@ -15,10 +15,11 @@ final class ProviderTests: XCTestCase {
     func testEAPIReferenceVector() throws {
         XCTAssertEqual(try ProtocolCrypto.eapi(path: "/api/test", json: "{}"), "4DC723619A991588865191FD2F319BAD89A665F3FF2B75B10678911D4E9910E4690E5F68E0095E53773148F1312770C2786A0951D5B32887C8AE362CEF057841F3A83A42DA35956C149F335E924490D4")
     }
-    func testUnsupportedProvidersHaveNoAdvertisedLogin() async {
+    func testQQAdvertisesOnlyVerifiedChannel() async {
         let service = OmniService()
         let methods = await service.loginMethods(provider: .qq)
-        XCTAssertTrue(methods.isEmpty)
+        XCTAssertEqual(methods, [.qr])
     }
 }
+
 

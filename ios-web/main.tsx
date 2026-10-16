@@ -23,7 +23,7 @@ type Snapshot = {
   time: number; duration: number; playing: boolean; visible: boolean;
   title: string; artist: string; album: string; coverUrl?: string;
   lyrics?: { original: string; translation: string; romanization: string; wordTimed: string };
-  settings: { renderer: string; background: string; showTranslation: boolean; showRomanization: boolean; lyricOffset: number; fontSize: number };
+  settings: { renderer: string; background: string; showTranslation: boolean; showRomanization: boolean; lyricOffset: number; fontSize: number; themeColors?: string[] };
   daylight: boolean; reduceMotion: boolean;
 };
 
@@ -104,10 +104,14 @@ function LyricsSurface() {
   }, [state?.visible, state?.playing, state?.generation, state?.settings.lyricOffset, lines, currentTime]);
 
   if (!state) return <div className="empty">Folia</div>;
+  const baseTheme = state.daylight ? DAYLIGHT_THEME : DEFAULT_THEME;
+  const colors = state.settings.themeColors;
+  const theme = colors?.length === 4 && colors.every(c => /^#[0-9a-f]{6}$/i.test(c))
+    ? { ...baseTheme, backgroundColor: colors[0], primaryColor: colors[1], accentColor: colors[2], secondaryColor: colors[3] } : baseTheme;
   return <VisualizerRenderer
     mode={hasVisualizerMode(state.settings.renderer) ? state.settings.renderer : 'classic'}
     currentTime={currentTime} currentLineIndex={lineIndex} lines={lines}
-    theme={state.daylight ? DAYLIGHT_THEME : DEFAULT_THEME}
+    theme={theme}
     isDaylight={state.daylight} audioPower={zero} audioBands={audioBands}
     songTitle={state.title} songArtist={state.artist} songAlbum={state.album} coverUrl={state.coverUrl}
     background={{ mode: state.settings.background }}

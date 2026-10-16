@@ -10,6 +10,7 @@ final class NavidromeTests: XCTestCase {
         let values = Dictionary(uniqueKeysWithValues: (parts.queryItems ?? []).map { ($0.name, $0.value ?? "") })
         XCTAssertEqual(parts.path, "/navidrome/rest/search3")
         XCTAssertEqual(values["u"], "用户 +")
+        XCTAssertTrue(url.absoluteString.contains("%2B"), "Literal plus signs must survive form-style server query decoding")
         XCTAssertEqual(values["query"], "a & b")
         XCTAssertEqual(values["t"], ProtocolCrypto.md5("passwordsalt"))
         XCTAssertEqual(values["s"], "salt")

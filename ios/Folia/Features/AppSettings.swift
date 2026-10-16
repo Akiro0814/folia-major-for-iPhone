@@ -46,6 +46,7 @@ struct VisualSettingsDocument: FileDocument {
         guard settings.fontSize.isFinite, (14...96).contains(settings.fontSize), settings.lyricOffset.isFinite else {
             throw CocoaError(.fileReadCorruptFile)
         }
+        if let colors = settings.themeColors { _ = try AIThemeService.validate(colors) }
     }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: try JSONEncoder().encode(settings))
@@ -61,4 +62,5 @@ extension MusicProvider {
 func localized(_ chinese: String, _ english: String) -> String {
     Locale.preferredLanguages.first?.hasPrefix("zh") == true ? chinese : english
 }
+
 

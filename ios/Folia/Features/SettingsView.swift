@@ -15,12 +15,14 @@ struct SettingsView: View {
         Form {
             Section(localized("音乐", "Music")) {
                 NavigationLink(localized("账户与音乐服务", "Accounts & services")) { AccountsView() }
+                NavigationLink(localized("跨设备同步", "Cross-device sync")) { FoliaSyncView() }
                 Picker(localized("音质", "Audio quality"), selection: $playback.quality) {
                     ForEach(AudioQuality.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
                 }
                 Text(localized("音质取决于平台账号权益与歌曲版权。设备收藏只保存歌曲引用，不下载音频。", "Quality depends on your provider subscription and track availability. Favorites store references only.")).font(.footnote).foregroundStyle(.secondary)
             }
             Section(localized("歌词与外观", "Lyrics & appearance")) {
+                NavigationLink(localized("AI 配色", "AI palette")) { AIThemeView() }
                 Picker(localized("歌词动画", "Lyric renderer"), selection: $settings.visual.renderer) {
                     ForEach(renderers) { Text($0.label).tag($0.mode) }
                 }
@@ -63,9 +65,11 @@ struct SettingsView: View {
                 guard data.count < 1_000_000 else { throw CocoaError(.fileReadTooLarge) }
                 let imported = try JSONDecoder().decode(VisualSettings.self, from: data)
                 guard renderers.contains(where: { $0.mode == imported.renderer }), imported.fontSize.isFinite, (14...96).contains(imported.fontSize), imported.lyricOffset.isFinite else { throw CocoaError(.fileReadCorruptFile) }
+                if let colors = imported.themeColors { _ = try AIThemeService.validate(colors) }
                 settings.visual = imported; message = localized("视觉配置已导入", "Visual settings imported")
             } catch { message = error.localizedDescription }
         }
     }
 }
+
 

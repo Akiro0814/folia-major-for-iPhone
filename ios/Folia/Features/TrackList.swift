@@ -94,6 +94,7 @@ struct LibraryView: View {
     @State private var collections: [MusicCollection] = []
     @State private var recommendations: [Track] = []
     @State private var recommendationError: String?
+    @State private var showCommands = false
     @State private var error: String?
     var body: some View {
         @Bindable var settings = settings
@@ -102,6 +103,9 @@ struct LibraryView: View {
                 Picker(localized("音乐平台", "Provider"), selection: $settings.preferredProvider) {
                     ForEach(MusicProvider.allCases) { Text($0.displayName).tag($0) }
                 }
+            }
+            if settings.preferredProvider == .navidrome {
+                NavigationLink(localized("专辑与歌手", "Albums & artists")) { NavidromeBrowseView() }
             }
             Section(localized("为你推荐", "For you")) {
                 if let recommendationError { Text(recommendationError).font(.caption).foregroundStyle(.secondary) }
@@ -124,7 +128,11 @@ struct LibraryView: View {
             }
         }
         .navigationTitle("Folia")
-        .toolbar { NavigationLink { AccountsView() } label: { Image(systemName: "person.crop.circle") } }
+        .toolbar {
+            NavigationLink { AccountsView() } label: { Image(systemName: "person.crop.circle") }
+            Button { showCommands = true } label: { Image(systemName: "command") }.accessibilityLabel(localized("命令面板", "Command palette"))
+        }
+        .sheet(isPresented: $showCommands) { CommandsView() }
         .task(id: settings.preferredProvider) { await load() }
         .refreshable { await load() }
     }
@@ -151,5 +159,7 @@ struct CollectionView: View {
             }
     }
 }
+
+
 
 

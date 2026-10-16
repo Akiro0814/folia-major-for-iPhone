@@ -1,9 +1,10 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 
-// Folia/Features/QRCodeView.swift — locally generated authorization QR with system sharing.
+// Folia/Features/QRCodeView.swift — provider image or locally encoded QR, with native image sharing.
 struct QRCodeView: View {
     let url: URL
+    var imageURL: URL? = nil
     private var image: UIImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(url.absoluteString.utf8)
@@ -12,15 +13,24 @@ struct QRCodeView: View {
         return UIImage(cgImage: cgImage)
     }
     var body: some View {
-        if let image {
-            VStack(spacing: 16) {
-                Image(uiImage: image).interpolation(.none).resizable().scaledToFit().frame(maxWidth: 240).padding(16).background(.white)
-                    .accessibilityLabel(localized("登录授权二维码", "Sign-in authorization QR"))
-                ShareLink(item: Image(uiImage: image), preview: SharePreview(localized("登录二维码", "Sign-in QR"), image: Image(uiImage: image))) {
-                    Label(localized("分享二维码图片", "Share QR image"), systemImage: "square.and.arrow.up")
+        if let imageURL {
+            AsyncImage(url: imageURL) { phase in
+                switch phase {
+                case .success(let image): content(image)
+                case .failure: Text(localized("二维码加载失败，请重新生成", "QR image failed to load. Generate again."))
+                default: ProgressView()
                 }
-                Text(localized("可分享二维码图片后在对应平台识别；能否同机授权取决于平台。", "Share this QR image for recognition in the provider app. Same-device authorization depends on the provider.")).font(.caption).foregroundStyle(.secondary)
             }
+        } else if let image { content(Image(uiImage: image)) }
+    }
+    private func content(_ image: Image) -> some View {
+        VStack(spacing: 16) {
+            image.interpolation(.none).resizable().scaledToFit().frame(maxWidth: 240).padding(16).background(.white)
+                .accessibilityLabel(localized("登录授权二维码", "Sign-in authorization QR"))
+            ShareLink(item: image, preview: SharePreview(localized("登录二维码", "Sign-in QR"), image: image)) {
+                Label(localized("分享二维码图片", "Share QR image"), systemImage: "square.and.arrow.up")
+            }
+            Text(localized("可分享二维码图片后在对应平台识别；能否同机授权取决于平台。", "Share this QR image for recognition in the provider app. Same-device authorization depends on the provider.")).font(.caption).foregroundStyle(.secondary)
         }
     }
 }

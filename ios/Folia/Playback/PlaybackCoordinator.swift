@@ -5,13 +5,22 @@ import Observation
 // Folia/Playback/PlaybackCoordinator.swift — native audio lifetime, queue, and stale-request protection.
 @MainActor @Observable final class PlaybackCoordinator {
     let service: OmniService
-    let player = AVPlayer()
+    private let resources = PlaybackResources()
+    var player: AVPlayer { resources.player }
     private var queueState = PlaybackQueue(ids: [], index: nil)
-    private var loadTask: Task<Void, Never>?
-    private var sleepTask: Task<Void, Never>?
+    private var loadTask: Task<Void, Never>? {
+        get { resources.loadTask } set { resources.loadTask = newValue }
+    }
+    private var sleepTask: Task<Void, Never>? {
+        get { resources.sleepTask } set { resources.sleepTask = newValue }
+    }
     private var generation = UUID()
-    private var timeObserver: Any?
-    var notifications: [NSObjectProtocol] = []
+    private var timeObserver: Any? {
+        get { resources.timeObserver } set { resources.timeObserver = newValue }
+    }
+    var notifications: [NSObjectProtocol] {
+        get { resources.notifications } set { resources.notifications = newValue }
+    }
     private var statusObservation: NSKeyValueObservation?
     var shouldResumeAfterInterruption = false
     private var retriedStream = false
@@ -50,11 +59,6 @@ import Observation
         observeSystemEvents()
     }
 
-    deinit {
-        loadTask?.cancel(); sleepTask?.cancel()
-        if let timeObserver { player.removeTimeObserver(timeObserver) }
-        notifications.forEach { NotificationCenter.default.removeObserver($0) }
-    }
 
     func playQueueItem(at index: Int) {
         guard tracks.indices.contains(index) else { return }
@@ -174,6 +178,7 @@ import Observation
         repeatMode = savedRepeat; shuffle = savedShuffle
     }
 }
+
 
 
 

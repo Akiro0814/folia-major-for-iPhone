@@ -21,6 +21,7 @@ extension OmniService {
         return try await establishAccount(response)
     }
     func startQR(provider: MusicProvider) async throws -> QRLogin {
+        if provider == .qq { return try await qq.startWechatQR() }
         if provider == .kugou { return try await discovery.startKugouQR() }
         try requireNetease(provider)
         let result = try await netease.request("/api/login/qrcode/unikey", ["type": 3])
@@ -29,6 +30,7 @@ extension OmniService {
         return QRLogin(key: key, url: url)
     }
     func pollQR(_ login: QRLogin, provider: MusicProvider) async throws -> QRLoginStatus {
+        if provider == .qq { return try await qq.pollWechatQR(login) }
         if provider == .kugou { return try await discovery.pollKugouQR(login) }
         try requireNetease(provider)
         let result = try await netease.request("/api/login/qrcode/client/login", ["key": login.key, "type": 3], codes: [200, 800, 801, 802, 803])
@@ -55,5 +57,6 @@ extension OmniService {
         return account
     }
 }
+
 
 
