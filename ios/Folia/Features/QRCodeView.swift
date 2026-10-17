@@ -12,8 +12,15 @@ struct QRCodeView: View {
               let cgImage = CIContext().createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: cgImage)
     }
+    private var embeddedImage: UIImage? {
+        guard let imageURL, imageURL.scheme == "data", imageURL.absoluteString.count < 5_000_000,
+              let payload = imageURL.absoluteString.split(separator: ",", maxSplits: 1).last,
+              let data = Data(base64Encoded: String(payload)) else { return nil }
+        return UIImage(data: data)
+    }
     var body: some View {
-        if let imageURL {
+        if let embeddedImage { content(Image(uiImage: embeddedImage)) }
+        else if let imageURL {
             AsyncImage(url: imageURL) { phase in
                 switch phase {
                 case .success(let image): content(image)
@@ -34,3 +41,4 @@ struct QRCodeView: View {
         }
     }
 }
+

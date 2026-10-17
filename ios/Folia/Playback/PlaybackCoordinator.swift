@@ -28,7 +28,12 @@ import Observation
     var currentTrack: Track?
     var nowPlayingArtwork: MPMediaItemArtwork?
     var artworkTrackID: String?
-    var artworkTask: Task<Void, Never>?
+    var artworkTask: Task<Void, Never>? {
+        get { resources.artworkTask } set { resources.artworkTask = newValue }
+    }
+    var remoteTargets: [(MPRemoteCommand, Any)] {
+        get { resources.remoteTargets } set { resources.remoteTargets = newValue }
+    }
     var lyrics: LyricsPayload?
     var lyricsError: String?
     var currentTime: Double = 0
@@ -196,6 +201,7 @@ import Observation
         repeatMode = savedRepeat; shuffle = savedShuffle
     }
 }
+
 
 
 

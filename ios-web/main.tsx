@@ -4,11 +4,13 @@ import { useMotionValue } from 'framer-motion';
 import { Buffer } from 'buffer';
 import VisualizerRenderer from '../src/components/visualizer/VisualizerRenderer';
 import { DEFAULT_THEME, DAYLIGHT_THEME } from '../src/services/baseThemes';
-import { parseLRC, parseYRC, parseQRC, parseKRC, parseTTML } from '../src/utils/lyrics/parserCore';
 import { installGlobalVisualizerFrameRateLimiter, setGlobalVisualizerFrameRate } from '../src/utils/frameRateLimiter';
 import { hasVisualizerMode } from '../src/components/visualizer/registry';
 import type { Line } from '../src/types';
+import type { VisualizerTuningBundle } from '../src/components/visualizer/tuningRegistry';
+import type { VisualizerBackgroundConfig } from '../src/components/visualizer/backgrounds/definition';
 import { acceptSnapshot, interpolateTime } from './bridge.mjs';
+import { parseNativeLyrics } from './lyrics';
 import '../src/i18n/config';
 import '../src/index.css';
 import './surface.css';
@@ -23,21 +25,9 @@ type Snapshot = {
   time: number; duration: number; playing: boolean; visible: boolean;
   title: string; artist: string; album: string; coverUrl?: string;
   lyrics?: { original: string; translation: string; romanization: string; wordTimed: string };
-  settings: { renderer: string; background: string; showTranslation: boolean; showRomanization: boolean; lyricOffset: number; fontSize: number; themeColors?: string[] };
+  settings: { renderer: string; background: string; showTranslation: boolean; showRomanization: boolean; lyricOffset: number; fontSize: number; themeColors?: string[]; visualizerTunings?: Record<string, Record<string, unknown>> };
   daylight: boolean; reduceMotion: boolean;
 };
-
-// Parse only when lyric payload changes; reuse Folia's actual timing and format parsers.
-function parseLines(payload: Snapshot['lyrics']): Line[] {
-  if (!payload) return [];
-  const { original = '', wordTimed = '', translation = '', romanization = '' } = payload;
-  const text = wordTimed || original;
-  if (text.trimStart().startsWith('<tt')) return parseTTML(text).lines;
-  if (/^\[\d+,\d+\]\(\d+,\d+,\d+\)/m.test(text)) return parseYRC(text, translation).lines;
-  if (/^\[\d+,\d+\].*\(\d+,\d+\)/m.test(text)) return parseQRC(text, translation).lines;
-  if (/^\[\d+,\d+\]<\d+,\d+,\d+>/m.test(text)) return parseKRC(text, translation).lines;
-  return parseLRC(original || wordTimed, translation, {}, romanization).lines;
-}
 
 function LyricsSurface() {
   const [state, setState] = useState<Snapshot | null>(null);
@@ -47,7 +37,7 @@ function LyricsSurface() {
   const zero = useMotionValue(0);
   const audioBands = useMemo(() => ({ bass: zero, lowMid: zero, mid: zero, vocal: zero, treble: zero }), [zero]);
   const lines = useMemo(() => {
-    try { return parseLines(state?.lyrics); }
+    try { return parseNativeLyrics(state?.lyrics); }
     catch { native()?.postMessage({ type: 'error', message: 'Lyrics parsing failed' }); return []; }
   }, [state?.lyrics]);
   const latestLines = useRef(lines);
@@ -111,10 +101,16 @@ function LyricsSurface() {
   return <VisualizerRenderer
     mode={hasVisualizerMode(state.settings.renderer) ? state.settings.renderer : 'classic'}
     currentTime={currentTime} currentLineIndex={lineIndex} lines={lines}
+    visualizerTunings={state.settings.visualizerTunings as VisualizerTuningBundle}
     theme={theme}
     isDaylight={state.daylight} audioPower={zero} audioBands={audioBands}
     songTitle={state.title} songArtist={state.artist} songAlbum={state.album} coverUrl={state.coverUrl}
-    background={{ mode: state.settings.background }}
+    background={{ mode: state.settings.background,
+      monet: { tuning: state.settings.visualizerTunings?.monet_background },
+      nomand: { tuning: state.settings.visualizerTunings?.nomand_background },
+      latent: { tuning: state.settings.visualizerTunings?.latent_background },
+      sora: { tuning: state.settings.visualizerTunings?.sora_background },
+    } as VisualizerBackgroundConfig}
     staticMode={state.reduceMotion || !state.visible} backgroundStaticMode={state.reduceMotion || !state.visible}
     paused={!state.playing || !state.visible} isPlayerChromeHidden
     lyricsFontScale={state.settings.fontSize / 36}

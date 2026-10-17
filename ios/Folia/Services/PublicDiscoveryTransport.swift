@@ -18,6 +18,7 @@ actor PublicDiscoveryTransport {
             UserDefaults.standard.set(created, forKey: "kugou.deviceMID")
         }
     }
+    func deviceMID() -> String { mid }
     func search(_ query: String, provider: MusicProvider) async throws -> [Track] {
         if provider == .qq { return try await searchQQ(query) }
         let response = try await kugou("/v3/search/song", params: ["albumhide": "0", "iscorrection": "1", "keyword": query,
@@ -28,9 +29,9 @@ actor PublicDiscoveryTransport {
         guard track.provider == .kugou else { throw MusicError.unsupported("QQ 音乐播放授权尚未完成。") }
         let hash = track.mediaID.lowercased()
         let key = ProtocolCrypto.md5("\(hash)57ae12eb6890223e355ccfcb74edf70d1005\(mid)0")
-        let result = try await kugou("/v5/url", params: ["album_id": "0", "area_code": "1", "hash": hash,
+        let result = try await kugou("/v5/url", params: ["album_id": track.providerData["albumID"] ?? "0", "area_code": "1", "hash": hash,
             "ssa_flag": "is_fromtrack", "version": "11430", "page_id": "151369488",
-            "quality": quality == .standard ? "128" : quality == .high ? "320" : "flac", "album_audio_id": "0",
+            "quality": quality == .standard ? "128" : quality == .high ? "320" : "flac", "album_audio_id": track.providerData["mixsongID"] ?? "0",
             "behavior": "play", "pid": "2", "cmd": "26", "pidversion": "3001", "IsFreePart": "0",
             "ppage_id": "463467626,350369493,788954147", "cdnBackup": "1", "module": "", "clientver": "11430", "key": key], router: "trackercdn.kugou.com")
         let values = result["url"] as? [String] ?? []
@@ -47,14 +48,18 @@ actor PublicDiscoveryTransport {
         guard let candidate = (search["candidates"] as? [[String: Any]])?.first,
               let id = OmniService.identifier(candidate["id"]), let access = candidate["accesskey"] as? String else { return LyricsPayload() }
         let downloaded = try await kugou("/download", params: ["ver": "1", "client": "android", "id": id,
-            "accesskey": access, "fmt": "lrc", "charset": "utf8"], base: "https://lyrics.kugou.com")
-        guard let content = downloaded["content"] as? String, let data = Data(base64Encoded: content) else { return LyricsPayload() }
+            "accesskey": access, "fmt": "krc", "charset": "utf8"], base: "https://lyrics.kugou.com")
+        guard let content = downloaded["content"] as? String else { return LyricsPayload() }
+        if let data = Data(base64Encoded: content), data.starts(with: Array("krc1".utf8)) {
+            return LyricsPayload(wordTimed: try TimedLyricsDecoder.krc(content))
+        }
+        guard let data = Data(base64Encoded: content) else { throw MusicError.invalidResponse }
         return LyricsPayload(original: String(decoding: data, as: UTF8.self))
     }
     // KuGouMusicApi 1.6.0 android signature includes sorted unescaped values and exact body bytes.
     func kugou(_ path: String, params: [String: String], router: String? = nil,
                base: String = "https://gateway.kugou.com", defaults: Bool = true, web: Bool = false,
-               body: [String: Any]? = nil) async throws -> [String: Any] {
+               body: [String: Any]? = nil, extraHeaders: [String: String] = [:]) async throws -> [String: Any] {
         let time = String(Int(Date().timeIntervalSince1970))
         var fields = defaults ? ["dfid": "-", "mid": mid, "uuid": "-", "appid": "1005", "clientver": "20489", "clienttime": time] : [:]
         fields.merge(params) { _, new in new }
@@ -71,6 +76,7 @@ actor PublicDiscoveryTransport {
             request.httpBody = encodedBody
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
+        for (key, value) in extraHeaders { request.setValue(value, forHTTPHeaderField: key) }
         request.setValue(router, forHTTPHeaderField: "x-router")
         request.setValue(mid, forHTTPHeaderField: "mid")
         request.setValue("-", forHTTPHeaderField: "dfid")
@@ -129,5 +135,8 @@ actor PublicDiscoveryTransport {
         return value
     }
 }
+
+
+
 
 

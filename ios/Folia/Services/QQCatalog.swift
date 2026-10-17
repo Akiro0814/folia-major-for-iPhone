@@ -27,6 +27,11 @@ extension QQProvider {
         return AudioSource(url: url, expiresAt: Date().addingTimeInterval(600))
     }
     func lyrics(for track: Track) async throws -> LyricsPayload {
+        do { return try await wordTimedLyrics(for: track) }
+        catch is CancellationError { throw CancellationError() }
+        catch { return try await lineLyrics(for: track) }
+    }
+    private func lineLyrics(for track: Track) async throws -> LyricsPayload {
         var url = URLComponents(string: "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg")!
         url.queryItems = ["songmid": track.mediaID, "format": "json", "outCharset": "utf-8", "pcachetime": String(Int64(Date().timeIntervalSince1970 * 1000))]
             .map { URLQueryItem(name: $0.key, value: $0.value) }
@@ -87,7 +92,8 @@ extension QQProvider {
     }
     static func normalize(_ item: [String: Any]) -> Track? {
         guard let mid = item["mid"] as? String ?? item["songmid"] as? String else { return nil }
-        let album = Self.dictionary(item["album"])
+        var album = Self.dictionary(item["album"])
+        if album.isEmpty { album = ["mid": item["albummid"] ?? "", "name": item["albumname"] ?? ""] }
         let artists = item["singer"] as? [[String: Any]] ?? []
         let artwork = (album["mid"] as? String).flatMap { URL(string: "https://y.gtimg.cn/music/photo_new/T002R500x500M000\($0).jpg") }
         return Track(mediaID: mid, provider: .qq, title: item["title"] as? String ?? item["name"] as? String ?? item["songname"] as? String ?? "歌曲",
@@ -95,3 +101,5 @@ extension QQProvider {
             artworkURL: artwork, duration: item["interval"] as? Double ?? 0)
     }
 }
+
+

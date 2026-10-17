@@ -39,6 +39,8 @@ struct CommandsView: View {
                     }
                 }
                 Section(localized("歌词与外观", "Lyrics & appearance")) {
+                    if matches(localized("主题库", "Theme library")) { NavigationLink { ThemeLibraryView() } label: { Label(localized("主题库", "Theme library"), systemImage: "paintpalette") } }
+                    if matches(localized("高级视觉调参", "Advanced visual tuning")) { NavigationLink { AdvancedTuningView() } label: { Label(localized("高级视觉调参", "Advanced visual tuning"), systemImage: "slider.horizontal.3") } }
                     if matches(localized("外观同步", "Appearance sync")) { NavigationLink { FoliaSyncView() } label: { Label(localized("外观同步", "Appearance sync"), systemImage: "arrow.triangle.2.circlepath") } }
                     if matches(localized("AI 主题生成", "AI theme generation")) { NavigationLink { AIThemeView() } label: { Label(localized("AI 主题生成", "AI theme generation"), systemImage: "sparkles") } }
                     ForEach(["common", "latent", "monet", "nomand", "sora"], id: \.self) { background in
@@ -67,3 +69,4 @@ struct CommandsView: View {
         if matches(title) { Button { operation() } label: { Label(title, systemImage: icon) } }
     }
 }
+

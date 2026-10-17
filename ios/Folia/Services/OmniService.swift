@@ -6,20 +6,24 @@ actor OmniService {
     let discovery = PublicDiscoveryTransport()
     let navidrome = NavidromeProvider()
     let qq = QQProvider()
-    func loginMethods(provider: MusicProvider) -> [LoginMethod] { provider == .qq ? [.qr] : [MusicProvider.netease, .kugou].contains(provider) ? [.sms, .password, .qr] : [] }
+    let bodian = BodianProvider()
+    func loginMethods(provider: MusicProvider) -> [LoginMethod] { [MusicProvider.qq, .bodian].contains(provider) ? [.qr] : [MusicProvider.netease, .kugou].contains(provider) ? [.sms, .password, .qr] : [] }
     func account(provider: MusicProvider) async -> MusicAccount? {
+        if provider == .bodian { return await bodian.account() }
         if provider == .qq { return await qq.account() }
         if provider == .navidrome { return await navidrome.account() }
         if provider == .kugou { return await discovery.kugouAccount() }
         return provider == .netease ? await netease.account() : nil
     }
     func logout(provider: MusicProvider) async throws {
+        if provider == .bodian { try await bodian.logout(); return }
         if provider == .qq { try await qq.logout(); return }
         if provider == .navidrome { try await navidrome.logout(); return }
         if provider == .kugou { try await discovery.logoutKugou(); return }
         if provider == .netease { try await netease.logout() }
     }
     func search(_ query: String, provider: MusicProvider) async throws -> [Track] {
+        if provider == .bodian { return try await bodian.search(query) }
         if provider == .qq, await qq.account() != nil { return try await qq.search(query) }
         if provider == .navidrome { return try await navidrome.search(query) }
         if provider != .netease { return try await discovery.search(query, provider: provider) }
@@ -28,6 +32,7 @@ actor OmniService {
         return songs.compactMap(Self.normalizeNetease)
     }
     func stream(for track: Track, quality: AudioQuality = .high) async throws -> AudioSource {
+        if track.provider == .bodian { return try await bodian.stream(for: track, quality: quality) }
         if track.provider == .qq { return try await qq.stream(for: track, quality: quality) }
         if track.provider == .navidrome { return try await navidrome.stream(for: track, quality: quality) }
         if track.provider != .netease { return try await discovery.stream(track, quality: quality) }
@@ -40,15 +45,17 @@ actor OmniService {
         return AudioSource(url: url, expiresAt: Date().addingTimeInterval((entry["expi"] as? Double) ?? 600))
     }
     func lyrics(for track: Track) async throws -> LyricsPayload {
+        if track.provider == .bodian { return try await bodian.lyrics(for: track) }
         if track.provider == .qq { return try await qq.lyrics(for: track) }
         if track.provider == .navidrome { return try await navidrome.lyrics(for: track) }
         if track.provider != .netease { return try await discovery.lyrics(track) }
-        let result = try await netease.request("/api/song/lyric", ["id": track.mediaID, "tv": -1, "lv": -1, "rv": -1, "kv": -1, "_nmclfl": 1])
+        let result = try await netease.request("/api/song/lyric/v1", ["id": track.mediaID, "cp": false, "tv": 0, "lv": 0, "rv": 0, "kv": 0, "yv": 0, "ytv": 0, "yrv": 0])
         return LyricsPayload(original: Self.lyricField(result, "lrc"), translation: Self.lyricField(result, "tlyric"),
                              romanization: Self.lyricField(result, "romalrc"), wordTimed: Self.lyricField(result, "yrc"))
     }
     func playlists(provider: MusicProvider) async throws -> [MusicCollection] {
         if provider == .kugou { return try await discovery.kugouPlaylists() }
+        if provider == .bodian { return try await bodian.playlists() }
         if provider == .qq { return try await qq.playlists() }
         if provider == .navidrome { return try await navidrome.playlists() }
         try requireNetease(provider)
@@ -61,7 +68,11 @@ actor OmniService {
         }
     }
     func tracks(in collection: MusicCollection) async throws -> [Track] {
+        if let raw = collection.providerData["kind"], let kind = CatalogKind(rawValue: raw) {
+            return try await catalogTracks(in: collection, kind: kind)
+        }
         if collection.provider == .kugou { return try await discovery.kugouTracks(in: collection) }
+        if collection.provider == .bodian { return try await bodian.tracks(in: collection) }
         if collection.provider == .qq { return try await qq.tracks(in: collection) }
         if collection.provider == .navidrome { return try await navidrome.tracks(in: collection) }
         try requireNetease(collection.provider)
@@ -82,6 +93,7 @@ actor OmniService {
     }
     func setLiked(_ liked: Bool, track: Track) async throws {
         if track.provider == .kugou { try await discovery.setKugouLiked(liked, track: track); return }
+        if track.provider == .bodian { try await bodian.setLiked(liked, track: track); return }
         if track.provider == .qq { try await qq.setLiked(liked, track: track); return }
         if track.provider == .navidrome { try await navidrome.setLiked(liked, track: track); return }
         try requireNetease(track.provider)
@@ -91,6 +103,7 @@ actor OmniService {
     func changePlaylist(_ collection: MusicCollection, track: Track, add: Bool) async throws {
         guard collection.provider == track.provider else { throw MusicError.unsupported("歌曲与歌单必须来自同一音乐平台。") }
         if collection.provider == .kugou { try await discovery.changeKugouPlaylist(collection, track: track, add: add); return }
+        if collection.provider == .bodian { try await bodian.changePlaylist(collection, track: track, add: add); return }
         if collection.provider == .qq { try await qq.changePlaylist(collection, track: track, add: add); return }
         if collection.provider == .navidrome { try await navidrome.changePlaylist(collection, track: track, add: add); return }
         guard collection.provider == track.provider else { throw MusicError.unsupported("歌曲与歌单必须来自同一音乐平台。") }
@@ -102,6 +115,7 @@ actor OmniService {
     }
     func recommendations(provider: MusicProvider) async throws -> [Track] {
         if provider == .kugou { return try await discovery.kugouRecommendations() }
+        if provider == .bodian { return try await bodian.recommendations() }
         if provider == .qq { return try await qq.recommendations() }
         if provider == .navidrome { return try await navidrome.recommendations() }
         try requireNetease(provider)
@@ -130,6 +144,9 @@ actor OmniService {
         (result[field] as? [String: Any])?["lyric"] as? String ?? ""
     }
 }
+
+
+
 
 
 

@@ -22,6 +22,7 @@ struct LoginView: View {
     @State private var busy = false
     @State private var qr: QRLogin?
     @State private var qrGeneration = 0
+    @State private var qrChannel: QRLoginChannel = .wechat
 
     var body: some View {
         if provider == .navidrome { NavidromeLoginView() } else { standardForm }
@@ -39,6 +40,12 @@ struct LoginView: View {
                     ForEach(methods, id: \.self) { method in Text(methodTitle(method)).tag(method) }
                 }
                 if method == .qr {
+                    if provider == .qq {
+                        Picker(localized("授权平台", "Authorization app"), selection: $qrChannel) {
+                            Text("QQ").tag(QRLoginChannel.qq)
+                            Text(localized("微信", "WeChat")).tag(QRLoginChannel.wechat)
+                        }.pickerStyle(.segmented)
+                    }
                     Section {
                         if let qr { QRCodeView(url: qr.url, imageURL: qr.imageURL)
                             ShareLink(item: qr.url) { Label(localized("打开或分享授权链接", "Open or share authorization"), systemImage: "qrcode") }
@@ -69,7 +76,8 @@ struct LoginView: View {
         .task(id: qrGeneration) {
             guard qrGeneration > 0, method == .qr else { return }
             do {
-                let ticket = try await playback.service.startQR(provider: provider)
+                await playback.service.cancelQR(provider: provider)
+                let ticket = try await playback.service.startQR(provider: provider, channel: qrChannel)
                 try Task.checkCancellation(); qr = ticket
                 for _ in 0..<100 {
                     try await Task.sleep(for: .seconds(2)); try Task.checkCancellation()
@@ -84,16 +92,24 @@ struct LoginView: View {
             } catch is CancellationError { } catch { message = error.localizedDescription }
         }
         .onChange(of: method) { qr = nil; qrGeneration = 0; credential = "" }
-        .onDisappear { credential = "" }
+        .onChange(of: qrChannel) {
+            qr = nil; qrGeneration = 0; message = nil
+            Task { await playback.service.cancelQR(provider: provider) }
+        }
+        .onDisappear {
+            credential = ""
+            Task { await playback.service.cancelQR(provider: provider) }
+        }
     }
     private func methodTitle(_ method: LoginMethod) -> String {
-        switch method { case .sms: localized("短信验证码", "SMS code"); case .password: localized("账号密码", "Password"); case .qr: provider == .qq ? localized("微信扫码", "WeChat QR") : localized("扫码授权", "QR authorization") }
+        switch method { case .sms: localized("短信验证码", "SMS code"); case .password: localized("账号密码", "Password"); case .qr: localized("扫码授权", "QR authorization") }
     }
     private func perform(_ operation: @escaping @MainActor () async throws -> Void) {
         busy = true; message = nil
         Task { do { try await operation() } catch { message = error.localizedDescription }; busy = false }
     }
 }
+
 
 
 

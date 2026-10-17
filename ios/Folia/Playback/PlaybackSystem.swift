@@ -8,16 +8,20 @@ extension PlaybackCoordinator {
         do { try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.allowAirPlay]) }
         catch { self.error = error.localizedDescription }
         let commands = MPRemoteCommandCenter.shared()
-        commands.playCommand.addTarget { [weak self] _ in Task { @MainActor in self?.resume() }; return .success }
-        commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.pause() }; return .success }
-        commands.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.toggle() }; return .success }
-        commands.nextTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.next() }; return .success }
-        commands.previousTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.previous() }; return .success }
-        commands.changePlaybackPositionCommand.addTarget { [weak self] event in
+        registerRemote(commands.playCommand) { [weak self] _ in Task { @MainActor in self?.resume() }; return .success }
+        registerRemote(commands.pauseCommand) { [weak self] _ in Task { @MainActor in self?.pause() }; return .success }
+        registerRemote(commands.togglePlayPauseCommand) { [weak self] _ in Task { @MainActor in self?.toggle() }; return .success }
+        registerRemote(commands.nextTrackCommand) { [weak self] _ in Task { @MainActor in self?.next() }; return .success }
+        registerRemote(commands.previousTrackCommand) { [weak self] _ in Task { @MainActor in self?.previous() }; return .success }
+        registerRemote(commands.changePlaybackPositionCommand) { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let position = event.positionTime
             Task { @MainActor in self?.seek(to: position) }; return .success
         }
+    }
+
+    private func registerRemote(_ command: MPRemoteCommand, handler: @escaping (MPRemoteCommandEvent) -> MPRemoteCommandHandlerStatus) {
+        remoteTargets.append((command, command.addTarget(handler: handler)))
     }
 
     func observeSystemEvents() {
@@ -77,5 +81,6 @@ extension PlaybackCoordinator {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
+
 
 

@@ -2,9 +2,9 @@ import Foundation
 // ios/Folia/Domain/MusicModels.swift
 
 enum MusicProvider: String, Codable, CaseIterable, Identifiable, Sendable {
-    case netease, kugou, qq, navidrome
+    case netease, kugou, qq, navidrome, bodian
     var id: String { rawValue }
-    var title: String { switch self { case .netease: "网易云音乐"; case .kugou: "酷狗音乐"; case .qq: "QQ 音乐"; case .navidrome: "Navidrome" } }
+    var title: String { switch self { case .netease: "网易云音乐"; case .kugou: "酷狗音乐"; case .qq: "QQ 音乐"; case .navidrome: "Navidrome"; case .bodian: "波点音乐" } }
 }
 enum AudioQuality: String, Codable, CaseIterable, Sendable { case standard, high, lossless }
 enum LoginMethod: String, CaseIterable, Sendable { case sms, password, qr }
@@ -17,7 +17,12 @@ struct Track: Identifiable, Codable, Hashable, Sendable {
     var artworkURL: URL?
     var duration: Double = 0
     var providerData: [String: String] = [:]
-    var id: String { "\(provider.rawValue):\(mediaID)" }
+    var id: String {
+        if provider == .navidrome, let namespace = providerData["serverNamespace"] {
+            return "\(provider.rawValue):\(namespace):\(mediaID)"
+        }
+        return "\(provider.rawValue):\(mediaID)"
+    }
 }
 struct MusicCollection: Identifiable, Codable, Hashable, Sendable {
     var id: String
@@ -40,7 +45,8 @@ struct LyricsPayload: Codable, Sendable {
     var romanization: String = ""
     var wordTimed: String = ""
 }
-struct QRLogin: Sendable { var key: String; var url: URL; var imageURL: URL? = nil }
+enum QRLoginChannel: String, CaseIterable, Sendable { case qq, wechat }
+struct QRLogin: Sendable { var key: String; var url: URL; var imageURL: URL? = nil; var channel: QRLoginChannel = .wechat }
 enum QRLoginStatus: Sendable { case waiting, scanned, expired, authorized(MusicAccount) }
 enum MusicError: LocalizedError, Sendable {
     case unsupported(String), authenticationRequired, unavailable(String), invalidResponse, server(Int, String), sessionChanged
@@ -54,6 +60,7 @@ enum MusicError: LocalizedError, Sendable {
         }
     }
 }
+
 
 
 

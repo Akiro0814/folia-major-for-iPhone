@@ -91,7 +91,7 @@ extension PublicDiscoveryTransport {
     nonisolated static func normalizeKugou(_ item: [String: Any]) -> Track? {
         let audio = item["audio_info"] as? [String: Any] ?? [:]
         guard let hash = item["hash"] as? String ?? item["FileHash"] as? String ?? audio["hash"] as? String else { return nil }
-        let title = item["songname"] as? String ?? item["SongName"] as? String ?? item["filename"] as? String ?? item["name"] as? String ?? "歌曲"
+        let title = item["songname"] as? String ?? item["SongName"] as? String ?? item["OriSongName"] as? String ?? item["filename"] as? String ?? item["name"] as? String ?? "歌曲"
         let artist = item["singername"] as? String ?? item["SingerName"] as? String ?? ""
         let image = (item["Image"] as? String ?? item["album_sizable_cover"] as? String)?.replacingOccurrences(of: "{size}", with: "480")
         var metadata: [String: String] = [:]
@@ -100,6 +100,7 @@ extension PublicDiscoveryTransport {
         metadata["mixsongID"] = OmniService.identifier(item["mixsongid"] ?? item["MixSongID"])
         return Track(mediaID: hash, provider: .kugou, title: title, artist: artist,
             album: item["album_name"] as? String ?? item["AlbumName"] as? String ?? "", artworkURL: image.flatMap(URL.init(string:)),
-            duration: item["duration"] as? Double ?? (item["timelen"] as? Double ?? 0) / 1000, providerData: metadata)
+            duration: item["duration"] as? Double ?? item["Duration"] as? Double ?? (item["timelen"] as? Double ?? 0) / 1000, providerData: metadata)
     }
 }
+

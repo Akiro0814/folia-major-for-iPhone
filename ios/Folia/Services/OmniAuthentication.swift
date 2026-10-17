@@ -2,6 +2,9 @@ import Foundation
 // ios/Folia/Services/OmniAuthentication.swift
 
 extension OmniService {
+    func cancelQR(provider: MusicProvider) async {
+        if provider == .qq { await qq.cancelQR() }
+    }
     func configureNavidrome(serverURL: String, username: String, password: String) async throws {
         try await navidrome.configure(serverURL: serverURL, username: username, password: password)
     }
@@ -20,8 +23,9 @@ extension OmniService {
         let response = try await netease.request("/api/w/login/cellphone", parameters)
         return try await establishAccount(response)
     }
-    func startQR(provider: MusicProvider) async throws -> QRLogin {
-        if provider == .qq { return try await qq.startWechatQR() }
+    func startQR(provider: MusicProvider, channel: QRLoginChannel = .wechat) async throws -> QRLogin {
+        if provider == .qq { return channel == .qq ? try await qq.startAppQR() : try await qq.startWechatQR() }
+        if provider == .bodian { return try await bodian.startQR() }
         if provider == .kugou { return try await discovery.startKugouQR() }
         try requireNetease(provider)
         let result = try await netease.request("/api/login/qrcode/unikey", ["type": 3])
@@ -30,7 +34,8 @@ extension OmniService {
         return QRLogin(key: key, url: url)
     }
     func pollQR(_ login: QRLogin, provider: MusicProvider) async throws -> QRLoginStatus {
-        if provider == .qq { return try await qq.pollWechatQR(login) }
+        if provider == .qq { return login.channel == .qq ? try await qq.pollAppQR(login) : try await qq.pollWechatQR(login) }
+        if provider == .bodian { return try await bodian.pollQR(login) }
         if provider == .kugou { return try await discovery.pollKugouQR(login) }
         try requireNetease(provider)
         let result = try await netease.request("/api/login/qrcode/client/login", ["key": login.key, "type": 3], codes: [200, 800, 801, 802, 803])
@@ -57,6 +62,8 @@ extension OmniService {
         return account
     }
 }
+
+
 
 
 

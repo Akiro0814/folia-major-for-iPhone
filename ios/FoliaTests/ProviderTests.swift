@@ -9,6 +9,12 @@ final class ProviderTests: XCTestCase {
         XCTAssertNotEqual(a.id, b.id)
         XCTAssertEqual(Set([a, b]).count, 2)
     }
+    func testKuGouObservedSearchFieldsPreserveTitleAndDuration() {
+        let song = PublicDiscoveryTransport.normalizeKugou(["FileHash": "abcdef", "OriSongName": "Title", "SingerName": "Artist", "Duration": 180, "MixSongID": 123, "AlbumID": 456])
+        XCTAssertEqual(song?.title, "Title")
+        XCTAssertEqual(song?.duration, 180)
+        XCTAssertEqual(song?.providerData["mixsongID"], "123")
+    }
     func testMD5MatchesPinnedProtocol() {
         XCTAssertEqual(ProtocolCrypto.md5("password"), "5f4dcc3b5aa765d61d8327deb882cf99")
     }
@@ -21,5 +27,6 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(methods, [.qr])
     }
 }
+
 
 

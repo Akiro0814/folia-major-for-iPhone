@@ -49,8 +49,26 @@ actor NavidromeProvider {
         let result = root["searchResult3"] as? [String: Any] ?? [:]
         return try songs(result["song"], configuration: config)
     }
+    func searchCatalog(_ query: String, kind: CatalogKind) async throws -> [MusicCollection] {
+        let config = try requireConfiguration()
+        let root = try await request("search3", parameters: [.init(name: "query", value: query), .init(name: "songCount", value: "0"), .init(name: "artistCount", value: kind == .artist ? "100" : "0"), .init(name: "albumCount", value: kind == .album ? "100" : "0")])
+        let result = root["searchResult3"] as? [String: Any] ?? [:]
+        var entries = try collections(result[kind == .album ? "album" : "artist"], configuration: config, prefix: kind == .album ? "album:" : "")
+        for index in entries.indices { entries[index].providerData["kind"] = kind.rawValue }
+        return entries
+    }
+    func catalogTracks(_ collection: MusicCollection, kind: CatalogKind) async throws -> [Track] {
+        guard collection.provider == .navidrome else { throw MusicError.invalidResponse }
+        try Self.requireNamespace(collection.providerData, configuration: requireConfiguration())
+        if kind == .album { return try await tracks(in: collection) }
+        let albums = try await albums(artistID: collection.id)
+        var result: [Track] = []
+        for album in albums { result += try await tracks(in: album); try Task.checkCancellation() }
+        return result
+    }
     func stream(for track: Track, quality: AudioQuality = .high) throws -> AudioSource {
         guard track.provider == .navidrome else { throw MusicError.invalidResponse }
+        try Self.requireNamespace(track.providerData, configuration: requireConfiguration())
         var parameters = [URLQueryItem(name: "id", value: track.mediaID)]
         if quality != .lossless { parameters += [.init(name: "format", value: "mp3"), .init(name: "maxBitRate", value: quality == .standard ? "128" : "320")] }
         return AudioSource(url: try Self.url(configuration: requireConfiguration(), endpoint: "stream", parameters: parameters))
@@ -79,6 +97,8 @@ actor NavidromeProvider {
         return try collections((root["artist"] as? [String: Any])?["album"], configuration: config, prefix: "album:")
     }
     func tracks(in collection: MusicCollection) async throws -> [Track] {
+        guard collection.provider == .navidrome else { throw MusicError.invalidResponse }
+        try Self.requireNamespace(collection.providerData, configuration: requireConfiguration())
         let config = try requireConfiguration()
         let isAlbum = collection.id.hasPrefix("album:")
         let id = isAlbum ? String(collection.id.dropFirst(6)) : collection.id
@@ -92,9 +112,15 @@ actor NavidromeProvider {
         return try songs((root["randomSongs"] as? [String: Any])?["song"], configuration: config)
     }
     func setLiked(_ liked: Bool, track: Track) async throws {
+        guard track.provider == .navidrome else { throw MusicError.invalidResponse }
+        try Self.requireNamespace(track.providerData, configuration: requireConfiguration())
         _ = try await request(liked ? "star" : "unstar", parameters: [.init(name: "id", value: track.mediaID)])
     }
     func changePlaylist(_ collection: MusicCollection, track: Track, add: Bool) async throws {
+        guard track.provider == .navidrome, collection.provider == .navidrome else { throw MusicError.invalidResponse }
+        let config = try requireConfiguration()
+        try Self.requireNamespace(track.providerData, configuration: config)
+        try Self.requireNamespace(collection.providerData, configuration: config)
         guard !collection.id.hasPrefix("album:") else { throw MusicError.unsupported("专辑不能作为歌单编辑。") }
         var parameters = [URLQueryItem(name: "playlistId", value: collection.id)]
         if add { parameters.append(.init(name: "songIdToAdd", value: track.mediaID)) }
@@ -116,9 +142,13 @@ actor NavidromeProvider {
         return result
     }
     func deletePlaylist(_ collection: MusicCollection) async throws {
+        guard collection.provider == .navidrome else { throw MusicError.invalidResponse }
+        try Self.requireNamespace(collection.providerData, configuration: requireConfiguration())
         _ = try await request("deletePlaylist", parameters: [.init(name: "id", value: collection.id)])
     }
     func lyrics(for track: Track) async throws -> LyricsPayload {
+        guard track.provider == .navidrome else { throw MusicError.invalidResponse }
+        try Self.requireNamespace(track.providerData, configuration: requireConfiguration())
         do {
             let root = try await request("getLyricsBySongId", parameters: [.init(name: "id", value: track.mediaID), .init(name: "enhanced", value: "true")])
             let entries = (root["lyricsList"] as? [String: Any])?["structuredLyrics"] as? [[String: Any]] ?? []
@@ -173,16 +203,31 @@ actor NavidromeProvider {
         parts.percentEncodedQuery = parts.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         guard let url = parts.url else { throw MusicError.invalidResponse }; return url
     }
+    /// A server-scoped reference cannot be reused against another server or an unverified legacy namespace.
+    static func requireNamespace(_ metadata: [String: String], configuration: NavidromeConfiguration) throws {
+        guard metadata["serverNamespace"] == (try serverNamespace(configuration)) else {
+            throw MusicError.unavailable("此歌曲或歌单来自其他 Navidrome 服务器或旧版本，请在当前服务器重新搜索添加。")
+        }
+    }
+    static func serverNamespace(_ configuration: NavidromeConfiguration) throws -> String {
+        _ = try url(configuration: configuration, endpoint: "ping", salt: "namespace-validation")
+        guard var parts = URLComponents(string: configuration.serverURL) else { throw MusicError.invalidResponse }
+        parts.scheme = parts.scheme?.lowercased(); parts.host = parts.host?.lowercased()
+        if (parts.scheme == "https" && parts.port == 443) || (parts.scheme == "http" && parts.port == 80) { parts.port = nil }
+        while parts.path.hasSuffix("/") { parts.path.removeLast() }
+        guard let normalized = parts.string else { throw MusicError.invalidResponse }
+        return ProtocolCrypto.md5(normalized)
+    }
     private func songs(_ value: Any?, configuration: NavidromeConfiguration) throws -> [Track] {
         try (value as? [[String: Any]] ?? []).compactMap { item in
             guard let id = OmniService.identifier(item["id"]) else { return nil }
-            return Track(mediaID: id, provider: .navidrome, title: item["title"] as? String ?? "", artist: item["artist"] as? String ?? "", album: item["album"] as? String ?? "", artworkURL: try artwork(item, configuration: configuration), duration: (item["duration"] as? NSNumber)?.doubleValue ?? 0)
+            return Track(mediaID: id, provider: .navidrome, title: item["title"] as? String ?? "", artist: item["artist"] as? String ?? "", album: item["album"] as? String ?? "", artworkURL: try artwork(item, configuration: configuration), duration: (item["duration"] as? NSNumber)?.doubleValue ?? 0, providerData: ["serverNamespace": try Self.serverNamespace(configuration)])
         }
     }
     private func collections(_ value: Any?, configuration: NavidromeConfiguration, prefix: String = "") throws -> [MusicCollection] {
         try (value as? [[String: Any]] ?? []).compactMap { item in
             guard let id = OmniService.identifier(item["id"]) else { return nil }
-            return MusicCollection(id: prefix + id, provider: .navidrome, title: item["name"] as? String ?? "", artworkURL: try artwork(item, configuration: configuration), trackCount: item["songCount"] as? Int ?? 0)
+            return MusicCollection(id: prefix + id, provider: .navidrome, title: item["name"] as? String ?? "", artworkURL: try artwork(item, configuration: configuration), trackCount: item["songCount"] as? Int ?? 0, providerData: ["serverNamespace": try Self.serverNamespace(configuration)])
         }
     }
     private func artwork(_ item: [String: Any], configuration: NavidromeConfiguration) throws -> URL? {

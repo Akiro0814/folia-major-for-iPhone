@@ -6,6 +6,12 @@ actor QQProvider {
     var session: ProviderSession
     var device: QQDevice
     var generation = 0
+    var qrTask: Task<Void, Never>?
+    var qrHeartbeat: Task<Void, Never>?
+    var qrSocket: QQSocket?
+    var qrStatus: QRLoginStatus = .waiting
+    var qrKey: String?
+    var qrError: Error?
     init() {
         let stored = (try? SessionVault().read(.qq)) ?? ProviderSession()
         session = stored
@@ -13,6 +19,7 @@ actor QQProvider {
     }
     func account() -> MusicAccount? { session.account }
     func logout() throws {
+        cancelQR()
         generation += 1
         session = ProviderSession()
         try persist()
@@ -70,6 +77,7 @@ actor QQProvider {
         try persist()
     }
     func startWechatQR() async throws -> QRLogin {
+        cancelQR()
         generation += 1
         try await bootstrap()
         var url = URLComponents(string: "https://open.weixin.qq.com/connect/qrconnect")!
@@ -141,3 +149,4 @@ actor QQProvider {
         return [:]
     }
 }
+

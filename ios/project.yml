@@ -30,6 +30,8 @@ targets:
         buildPhase: resources
       - path: Folia/Resources/visualizers.json
         buildPhase: resources
+      - path: Folia/Resources/tuning-defaults.json
+        buildPhase: resources
       - path: ../LICENSE
         buildPhase: resources
     settings:
@@ -46,6 +48,9 @@ targets:
       - sdk: MediaPlayer.framework
       - sdk: WebKit.framework
       - sdk: Security.framework
+      - sdk: JavaScriptCore.framework
+      - sdk: Network.framework
+      - sdk: libz.tbd
   FoliaTests:
     type: bundle.unit-test
     platform: iOS

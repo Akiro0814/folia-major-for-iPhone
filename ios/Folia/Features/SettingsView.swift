@@ -23,6 +23,8 @@ struct SettingsView: View {
             }
             Section(localized("歌词与外观", "Lyrics & appearance")) {
                 NavigationLink(localized("AI 配色", "AI palette")) { AIThemeView() }
+                NavigationLink(localized("主题库", "Theme library")) { ThemeLibraryView() }
+                NavigationLink(localized("高级视觉调参", "Advanced visual tuning")) { AdvancedTuningView() }
                 Picker(localized("歌词动画", "Lyric renderer"), selection: $settings.visual.renderer) {
                     ForEach(renderers) { Text($0.label).tag($0.mode) }
                 }
@@ -63,13 +65,13 @@ struct SettingsView: View {
                 let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
                 let data = try Data(contentsOf: url)
                 guard data.count < 1_000_000 else { throw CocoaError(.fileReadTooLarge) }
-                let imported = try JSONDecoder().decode(VisualSettings.self, from: data)
-                guard renderers.contains(where: { $0.mode == imported.renderer }), imported.fontSize.isFinite, (14...96).contains(imported.fontSize), imported.lyricOffset.isFinite else { throw CocoaError(.fileReadCorruptFile) }
-                if let colors = imported.themeColors { _ = try AIThemeService.validate(colors) }
+                let imported = try JSONDecoder().decode(VisualSettings.self, from: data).validated(allowedRenderers: renderers.map(\.mode))
                 settings.visual = imported; message = localized("视觉配置已导入", "Visual settings imported")
             } catch { message = error.localizedDescription }
         }
     }
 }
+
+
 
 
