@@ -21,7 +21,7 @@ struct RootView: View {
                             Text(track.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }.buttonStyle(.plain)
-                    Button { playback.toggle() } label: { Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill") }
+                    Button { playback.toggle() } label: { Image(systemName: playback.isPlaybackRequested ? "pause.fill" : "play.fill") }
                         .accessibilityLabel(localized("播放或暂停", "Play or pause"))
                     Button { playback.next() } label: { Image(systemName: "forward.end.fill") }.accessibilityLabel(localized("下一首", "Next"))
                 }.padding(.horizontal).padding(.vertical, 8)
@@ -30,3 +30,4 @@ struct RootView: View {
         .sheet(isPresented: $showPlayer) { PlayerView().presentationDragIndicator(.visible) }
     }
 }
+

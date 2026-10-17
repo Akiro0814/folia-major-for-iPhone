@@ -12,7 +12,6 @@ final class NavigationTests: XCTestCase {
         let portrait = XCTAttachment(screenshot: app.screenshot()); portrait.name = "search-portrait"; portrait.lifetime = .keepAlways; add(portrait)
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.searchFields.firstMatch.exists)
-        let portrait = XCTAttachment(screenshot: app.screenshot()); portrait.name = "search-portrait"; portrait.lifetime = .keepAlways; add(portrait)
         let landscape = XCTAttachment(screenshot: app.screenshot()); landscape.name = "search-landscape"; landscape.lifetime = .keepAlways; add(landscape)
         XCUIDevice.shared.orientation = .portrait
         app.tabBars.buttons["设置"].tap()

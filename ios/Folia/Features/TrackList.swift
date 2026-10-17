@@ -140,6 +140,7 @@ struct LibraryView: View {
         error = nil; collections = []; recommendations = []; recommendationError = nil
         do { let result = try await playback.service.playlists(provider: settings.preferredProvider); try Task.checkCancellation(); collections = result }
         catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+        guard !Task.isCancelled else { return }
         do { let result = try await playback.service.recommendations(provider: settings.preferredProvider); try Task.checkCancellation(); recommendations = result }
         catch { if !Task.isCancelled { recommendationError = error.localizedDescription } }
     }
@@ -159,6 +160,7 @@ struct CollectionView: View {
             }
     }
 }
+
 
 
 

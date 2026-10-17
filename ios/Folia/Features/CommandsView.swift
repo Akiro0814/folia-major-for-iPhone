@@ -40,6 +40,10 @@ struct CommandsView: View {
                 }
                 Section(localized("歌词与外观", "Lyrics & appearance")) {
                     if matches(localized("外观同步", "Appearance sync")) { NavigationLink { FoliaSyncView() } label: { Label(localized("外观同步", "Appearance sync"), systemImage: "arrow.triangle.2.circlepath") } }
+                    if matches(localized("AI 主题生成", "AI theme generation")) { NavigationLink { AIThemeView() } label: { Label(localized("AI 主题生成", "AI theme generation"), systemImage: "sparkles") } }
+                    ForEach(["common", "latent", "monet", "nomand", "sora"], id: \.self) { background in
+                        action(localized("背景：", "Background: ") + background, icon: "photo") { settings.visual.background = background }
+                    }
                     ForEach(VisualMode.bundled) { mode in
                         action(localized("歌词动画：", "Renderer: ") + mode.label, icon: "text.alignleft") { settings.visual.renderer = mode.mode }
                     }

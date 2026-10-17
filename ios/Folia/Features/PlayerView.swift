@@ -76,7 +76,7 @@ struct PlayerView: View {
             }
             HStack(spacing: 32) {
                 Button { playback.previous() } label: { Image(systemName: "backward.end.fill").font(.title) }.accessibilityLabel(localized("上一首", "Previous"))
-                Button { playback.toggle() } label: { Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill").font(.largeTitle).frame(width: 72, height: 72) }
+                Button { playback.toggle() } label: { Image(systemName: playback.isPlaybackRequested ? "pause.fill" : "play.fill").font(.largeTitle).frame(width: 72, height: 72) }
                     .buttonStyle(.glass).accessibilityLabel(localized("播放或暂停", "Play or pause"))
                 Button { playback.next() } label: { Image(systemName: "forward.end.fill").font(.title) }.accessibilityLabel(localized("下一首", "Next"))
             }
@@ -122,6 +122,7 @@ struct QueueView: View {
         }
     }
 }
+
 
 
 

@@ -16,6 +16,7 @@ struct Track: Identifiable, Codable, Hashable, Sendable {
     var album: String = ""
     var artworkURL: URL?
     var duration: Double = 0
+    var providerData: [String: String] = [:]
     var id: String { "\(provider.rawValue):\(mediaID)" }
 }
 struct MusicCollection: Identifiable, Codable, Hashable, Sendable {
@@ -24,6 +25,7 @@ struct MusicCollection: Identifiable, Codable, Hashable, Sendable {
     var title: String
     var artworkURL: URL?
     var trackCount: Int = 0
+    var providerData: [String: String] = [:]
 }
 struct MusicAccount: Codable, Sendable {
     var id: String
@@ -52,5 +54,6 @@ enum MusicError: LocalizedError, Sendable {
         }
     }
 }
+
 
 

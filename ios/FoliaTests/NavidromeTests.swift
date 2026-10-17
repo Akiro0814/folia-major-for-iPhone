@@ -34,4 +34,14 @@ final class NavidromeTests: XCTestCase {
         XCTAssertEqual(NavidromeProvider.lyricText(timed), "[00:01.60]hello\n[00:02.40]world")
         XCTAssertEqual(NavidromeProvider.lyricText(["synced": false, "line": [["value": "hello"]]]), "hello")
     }
-}
+    func testServerNamespaceNormalizesAddressAndRejectsCrossServerReferences() throws {
+        let first = NavidromeConfiguration(serverURL: "https://MUSIC.example.test:443/navidrome/", username: "u", password: "p")
+        let same = NavidromeConfiguration(serverURL: "https://music.example.test/navidrome", username: "u", password: "p")
+        let other = NavidromeConfiguration(serverURL: "https://other.example.test/navidrome", username: "u", password: "p")
+        let namespace = try NavidromeProvider.serverNamespace(first)
+        XCTAssertEqual(namespace, try NavidromeProvider.serverNamespace(same))
+        XCTAssertNotEqual(namespace, try NavidromeProvider.serverNamespace(other))
+        XCTAssertNoThrow(try NavidromeProvider.requireNamespace(["serverNamespace": namespace], configuration: same))
+        XCTAssertThrowsError(try NavidromeProvider.requireNamespace(["serverNamespace": namespace], configuration: other))
+        XCTAssertThrowsError(try NavidromeProvider.requireNamespace([:], configuration: first))
+    }}

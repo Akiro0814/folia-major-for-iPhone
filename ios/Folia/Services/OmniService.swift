@@ -48,6 +48,7 @@ actor OmniService {
                              romanization: Self.lyricField(result, "romalrc"), wordTimed: Self.lyricField(result, "yrc"))
     }
     func playlists(provider: MusicProvider) async throws -> [MusicCollection] {
+        if provider == .kugou { return try await discovery.kugouPlaylists() }
         if provider == .qq { return try await qq.playlists() }
         if provider == .navidrome { return try await navidrome.playlists() }
         try requireNetease(provider)
@@ -60,6 +61,7 @@ actor OmniService {
         }
     }
     func tracks(in collection: MusicCollection) async throws -> [Track] {
+        if collection.provider == .kugou { return try await discovery.kugouTracks(in: collection) }
         if collection.provider == .qq { return try await qq.tracks(in: collection) }
         if collection.provider == .navidrome { return try await navidrome.tracks(in: collection) }
         try requireNetease(collection.provider)
@@ -79,6 +81,7 @@ actor OmniService {
         return ids.compactMap { map[$0] }
     }
     func setLiked(_ liked: Bool, track: Track) async throws {
+        if track.provider == .kugou { try await discovery.setKugouLiked(liked, track: track); return }
         if track.provider == .qq { try await qq.setLiked(liked, track: track); return }
         if track.provider == .navidrome { try await navidrome.setLiked(liked, track: track); return }
         try requireNetease(track.provider)
@@ -87,6 +90,7 @@ actor OmniService {
     }
     func changePlaylist(_ collection: MusicCollection, track: Track, add: Bool) async throws {
         guard collection.provider == track.provider else { throw MusicError.unsupported("歌曲与歌单必须来自同一音乐平台。") }
+        if collection.provider == .kugou { try await discovery.changeKugouPlaylist(collection, track: track, add: add); return }
         if collection.provider == .qq { try await qq.changePlaylist(collection, track: track, add: add); return }
         if collection.provider == .navidrome { try await navidrome.changePlaylist(collection, track: track, add: add); return }
         guard collection.provider == track.provider else { throw MusicError.unsupported("歌曲与歌单必须来自同一音乐平台。") }
@@ -97,6 +101,7 @@ actor OmniService {
             "trackIds": String(decoding: ids, as: UTF8.self), "imme": "true"])
     }
     func recommendations(provider: MusicProvider) async throws -> [Track] {
+        if provider == .kugou { return try await discovery.kugouRecommendations() }
         if provider == .qq { return try await qq.recommendations() }
         if provider == .navidrome { return try await navidrome.recommendations() }
         try requireNetease(provider)
@@ -125,6 +130,7 @@ actor OmniService {
         (result[field] as? [String: Any])?["lyric"] as? String ?? ""
     }
 }
+
 
 
 

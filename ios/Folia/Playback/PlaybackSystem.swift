@@ -1,5 +1,6 @@
 import AVFoundation
 import MediaPlayer
+import UIKit
 
 // Folia/Playback/PlaybackSystem.swift — interruption, route and system transport integration.
 extension PlaybackCoordinator {
@@ -7,7 +8,7 @@ extension PlaybackCoordinator {
         do { try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.allowAirPlay]) }
         catch { self.error = error.localizedDescription }
         let commands = MPRemoteCommandCenter.shared()
-        commands.playCommand.addTarget { [weak self] _ in Task { @MainActor in if self?.isPlaying == false { self?.toggle() } }; return .success }
+        commands.playCommand.addTarget { [weak self] _ in Task { @MainActor in self?.resume() }; return .success }
         commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.pause() }; return .success }
         commands.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.toggle() }; return .success }
         commands.nextTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.next() }; return .success }
@@ -33,9 +34,9 @@ extension PlaybackCoordinator {
             Task { @MainActor in
                 guard let self else { return }
                 if type == AVAudioSession.InterruptionType.began.rawValue {
-                    self.shouldResumeAfterInterruption = self.isPlaying; self.pause()
+                    self.shouldResumeAfterInterruption = self.isPlaybackRequested; self.pause()
                 } else if self.shouldResumeAfterInterruption && AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) {
-                    self.toggle(); self.shouldResumeAfterInterruption = false
+                    self.resume(); self.shouldResumeAfterInterruption = false
                 }
             }
         })
@@ -45,13 +46,36 @@ extension PlaybackCoordinator {
         })
     }
 
+    // Fetch once per selected track; a late cover from an old song cannot replace current lock-screen metadata.
+    func loadNowPlayingArtwork(for track: Track) {
+        artworkTask?.cancel()
+        if artworkTrackID == track.id && nowPlayingArtwork != nil { return }
+        nowPlayingArtwork = nil; artworkTrackID = nil
+        guard let url = track.artworkURL, ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return }
+        artworkTask = Task { [weak self] in
+            do {
+                var request = URLRequest(url: url); request.timeoutInterval = 20
+                let (data, response) = try await URLSession.shared.data(for: request)
+                try Task.checkCancellation()
+                guard let self, self.currentTrack?.id == track.id, data.count < 10_000_000,
+                      let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
+                      let image = UIImage(data: data) else { return }
+                self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                self.artworkTrackID = track.id; self.updateNowPlaying()
+            } catch { /* Missing cover art does not interrupt native audio. */ }
+        }
+    }
     func updateNowPlaying() {
         guard let track = currentTrack else { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil; return }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: track.title, MPMediaItemPropertyArtist: track.artist,
             MPMediaItemPropertyAlbumTitle: track.album, MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
+        if artworkTrackID == track.id, let nowPlayingArtwork { info[MPMediaItemPropertyArtwork] = nowPlayingArtwork }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
+
+

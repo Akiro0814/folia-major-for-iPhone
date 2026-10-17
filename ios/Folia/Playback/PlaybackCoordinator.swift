@@ -26,11 +26,16 @@ import Observation
     private var retriedStream = false
     var tracks: [Track] = []
     var currentTrack: Track?
+    var nowPlayingArtwork: MPMediaItemArtwork?
+    var artworkTrackID: String?
+    var artworkTask: Task<Void, Never>?
     var lyrics: LyricsPayload?
     var lyricsError: String?
     var currentTime: Double = 0
     var duration: Double = 0
     var isPlaying = false
+    var isPlaybackRequested = false
+    private var lastPersistedPosition: Double = 0
     var isLoading = false
     var error: String?
     var sleepDeadline: Date?
@@ -48,11 +53,15 @@ import Observation
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
                 guard let self else { return }
+                guard self.player.currentItem != nil, !self.isLoading else { return }
                 let seconds = time.seconds
                 if seconds.isFinite { self.currentTime = seconds }
                 let length = self.player.currentItem?.duration.seconds ?? 0
                 if length.isFinite && length > 0 { self.duration = length }
                 self.isPlaying = self.player.timeControlStatus == .playing
+                if abs(self.currentTime - self.lastPersistedPosition) >= 10 {
+                    self.persist(); self.lastPersistedPosition = self.currentTime
+                }
                 self.updateNowPlaying()
             }
         }
@@ -74,11 +83,11 @@ import Observation
     }
 
     // Each stream/lyric resolution belongs to a generation; a late response cannot replace a newer song.
-    private func load(_ track: Track, position: Double, retry: Bool = false) {
+    private func load(_ track: Track, position: Double, retry: Bool = false, autoplay: Bool = true) {
         loadTask?.cancel(); player.pause(); statusObservation = nil; player.replaceCurrentItem(with: nil)
         generation = UUID(); let request = generation
         currentTrack = track; lyrics = nil; lyricsError = nil; currentTime = position; duration = track.duration
-        isPlaying = false; isLoading = true; error = nil; retriedStream = retry
+        isPlaying = false; isPlaybackRequested = autoplay; isLoading = true; error = nil; retriedStream = retry
         loadTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -96,8 +105,10 @@ import Observation
                 player.replaceCurrentItem(with: item)
                 if position > 0 { await player.seek(to: CMTime(seconds: position, preferredTimescale: 600)) }
                 try Task.checkCancellation(); guard generation == request else { return }
-                try AVAudioSession.sharedInstance().setActive(true)
-                player.play(); isPlaying = true; isLoading = false; persist(); updateNowPlaying()
+                if isPlaybackRequested {
+                    try AVAudioSession.sharedInstance().setActive(true); player.play(); isPlaying = true
+                }
+                isLoading = false; persist(); updateNowPlaying(); loadNowPlayingArtwork(for: track)
                 do {
                     let payload = try await service.lyrics(for: track)
                     try Task.checkCancellation(); guard generation == request else { return }; lyrics = payload
@@ -106,18 +117,25 @@ import Observation
                 }
             } catch is CancellationError { } catch {
                 guard generation == request else { return }
-                self.error = error.localizedDescription; isLoading = false; isPlaying = false
+                self.error = error.localizedDescription; isLoading = false; isPlaying = false; isPlaybackRequested = false
             }
         }
     }
 
-    func toggle() {
+    func toggle() { if isPlaybackRequested { pause() } else { resume() } }
+    func resume() {
+        isPlaybackRequested = true
         guard !isLoading else { return }
         if player.currentItem == nil, let track = currentTrack { load(track, position: currentTime); return }
-        if isPlaying { player.pause(); isPlaying = false } else { try? AVAudioSession.sharedInstance().setActive(true); player.play(); isPlaying = true }
+        guard player.currentItem != nil else { isPlaybackRequested = false; return }
+        do { try AVAudioSession.sharedInstance().setActive(true); player.play() }
+        catch { self.error = error.localizedDescription; isPlaybackRequested = false }
         persist(); updateNowPlaying()
     }
-    func pause() { player.pause(); isPlaying = false; persist(); updateNowPlaying() }
+    func pause() {
+        isPlaybackRequested = false; player.pause(); isPlaying = false; persist(); updateNowPlaying()
+    }
+    func savePlaybackState() { persist() }
     func seek(to seconds: Double) {
         guard seconds.isFinite else { return }
         currentTime = max(0, min(seconds, max(duration, 0)))
@@ -156,7 +174,7 @@ import Observation
     }
 
     private func handleFailure(_ failure: Error?) {
-        if !retriedStream, let track = currentTrack { load(track, position: currentTime, retry: true) }
+        if !retriedStream, let track = currentTrack { load(track, position: currentTime, retry: true, autoplay: isPlaybackRequested) }
         else { error = failure?.localizedDescription ?? localized("无法播放这首歌曲", "This song cannot be played"); isLoading = false; pause() }
     }
     private func persist() {
@@ -178,6 +196,8 @@ import Observation
         repeatMode = savedRepeat; shuffle = savedShuffle
     }
 }
+
+
 
 
 

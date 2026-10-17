@@ -22,15 +22,7 @@ actor PublicDiscoveryTransport {
         if provider == .qq { return try await searchQQ(query) }
         let response = try await kugou("/v3/search/song", params: ["albumhide": "0", "iscorrection": "1", "keyword": query,
             "nocollect": "0", "page": "1", "pagesize": "30", "platform": "AndroidFilter"], router: "complexsearch.kugou.com")
-        let data = response["data"] as? [String: Any] ?? [:]
-        return (data["info"] as? [[String: Any]] ?? data["lists"] as? [[String: Any]] ?? []).compactMap { item in
-            guard let hash = item["hash"] as? String ?? item["FileHash"] as? String else { return nil }
-            let artwork = (item["Image"] as? String)?.replacingOccurrences(of: "{size}", with: "480")
-            return Track(mediaID: hash, provider: .kugou, title: item["songname"] as? String ?? item["SongName"] as? String ?? "歌曲",
-                artist: item["singername"] as? String ?? item["SingerName"] as? String ?? "",
-                album: item["album_name"] as? String ?? item["AlbumName"] as? String ?? "",
-                artworkURL: artwork.flatMap(URL.init(string:)), duration: item["duration"] as? Double ?? 0)
-        }
+        return Self.kugouItems(response).compactMap(Self.normalizeKugou)
     }
     func stream(_ track: Track, quality: AudioQuality) async throws -> AudioSource {
         guard track.provider == .kugou else { throw MusicError.unsupported("QQ 音乐播放授权尚未完成。") }
@@ -137,4 +129,5 @@ actor PublicDiscoveryTransport {
         return value
     }
 }
+
 
