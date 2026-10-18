@@ -43,6 +43,7 @@ struct SettingsView: View {
                 }
             }
             Section(localized("配置", "Configuration")) {
+                NavigationLink(localized("应用备份", "App backup")) { BackupView() }
                 Button(localized("导出视觉配置", "Export visual configuration"), systemImage: "square.and.arrow.up") { exporting = true }
                 Button(localized("导入视觉配置", "Import visual configuration"), systemImage: "square.and.arrow.down") { importing = true }
                 Button(localized("恢复默认外观", "Reset appearance"), role: .destructive) { settings.visual = VisualSettings() }
@@ -71,6 +72,7 @@ struct SettingsView: View {
         }
     }
 }
+
 
 
 

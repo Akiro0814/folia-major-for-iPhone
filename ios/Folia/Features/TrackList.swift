@@ -3,13 +3,38 @@ import SwiftUI
 // Folia/Features/TrackList.swift — shared online song actions and artwork.
 struct ArtworkView: View {
     let url: URL?
+    @Environment(PlaybackCoordinator.self) private var playback
+    @State private var privateImage: UIImage?
+    private var placeholder: some View {
+        Rectangle().fill(.quaternary).overlay { Image(systemName: "music.note").font(.title).foregroundStyle(.secondary) }
+    }
     var body: some View {
-        AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: {
-            Rectangle().fill(.quaternary).overlay { Image(systemName: "music.note").font(.title).foregroundStyle(.secondary) }
+        Group {
+            if url?.scheme == "folia-navidrome" {
+                if let privateImage { Image(uiImage: privateImage).resizable().scaledToFill() }
+                else { placeholder }
+            } else {
+                AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: { placeholder }
+            }
         }.clipped().accessibilityHidden(true)
+        .task(id: url) {
+            privateImage = nil
+            guard let url, url.scheme == "folia-navidrome" else { return }
+            let session = URLSession(configuration: .ephemeral)
+            defer { session.invalidateAndCancel() }
+            do {
+                let resolved = try await playback.service.resolveArtworkURL(url)
+                var request = URLRequest(url: resolved); request.timeoutInterval = 20
+                request.cachePolicy = .reloadIgnoringLocalCacheData
+                let (data, response) = try await session.data(for: request)
+                try Task.checkCancellation()
+                if let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode), data.count < 10_000_000 {
+                    privateImage = UIImage(data: data)
+                }
+            } catch { /* Keep the placeholder if the server account is unavailable. */ }
+        }
     }
 }
-
 struct TrackRows: View {
     let tracks: [Track]
     @Environment(PlaybackCoordinator.self) private var playback
@@ -41,50 +66,13 @@ struct TrackRows: View {
                 }
                 Button(localized("添加到歌单", "Add to playlist"), systemImage: "text.badge.plus") { addingToPlaylist = true; playlistTrack = track }
                 Button(localized("从歌单移除", "Remove from playlist"), systemImage: "text.badge.minus") { addingToPlaylist = false; playlistTrack = track }
-                if let url = track.artworkURL { ShareLink(item: url) { Label(localized("分享封面", "Share artwork"), systemImage: "square.and.arrow.up") } }
+                if let url = track.artworkURL, url.scheme != "folia-navidrome" { ShareLink(item: url) { Label(localized("分享封面", "Share artwork"), systemImage: "square.and.arrow.up") } }
             }
         }
         .sheet(item: $playlistTrack) { PlaylistActionView(track: $0, add: addingToPlaylist) }
         .alert(localized("平台操作失败", "Provider action failed"), isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
             Button(localized("好", "OK")) { actionError = nil }
         } message: { Text(actionError ?? "") }
-    }
-}
-
-struct SearchView: View {
-    @Environment(AppSettings.self) private var settings
-    @Environment(PlaybackCoordinator.self) private var playback
-    @State private var query = ""
-    @State private var tracks: [Track] = []
-    @State private var error: String?
-    @State private var loading = false
-    @State private var submitted = ""
-
-    var body: some View {
-        @Bindable var settings = settings
-        List {
-            Picker(localized("音乐平台", "Provider"), selection: $settings.preferredProvider) {
-                ForEach(MusicProvider.allCases) { Text($0.displayName).tag($0) }
-            }
-            if loading { ProgressView() }
-            if let error { Text(error).foregroundStyle(.red) }
-            TrackRows(tracks: tracks)
-            if tracks.isEmpty && !loading && error == nil {
-                ContentUnavailableView(localized("找到下一首心动", "Find your next favorite"), systemImage: "magnifyingglass", description: Text(localized("搜索在线歌曲、歌手或专辑。", "Search online songs, artists or albums.")))
-            }
-        }
-        .navigationTitle(localized("搜索", "Search"))
-        .searchable(text: $query, prompt: localized("歌曲、歌手、专辑", "Songs, artists, albums"))
-        .onSubmit(of: .search) { submitted = query }
-        .task(id: "\(submitted)|\(settings.preferredProvider.rawValue)") {
-            guard !submitted.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-            loading = true; error = nil; tracks = []
-            do {
-                let result = try await playback.service.search(submitted, provider: settings.preferredProvider)
-                try Task.checkCancellation(); tracks = result
-            } catch is CancellationError { } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
-            if !Task.isCancelled { loading = false }
-        }
     }
 }
 
@@ -160,6 +148,10 @@ struct CollectionView: View {
             }
     }
 }
+
+
+
+
 
 
 

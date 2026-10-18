@@ -46,7 +46,7 @@ struct LyricsPayload: Codable, Sendable {
     var wordTimed: String = ""
 }
 enum QRLoginChannel: String, CaseIterable, Sendable { case qq, wechat }
-struct QRLogin: Sendable { var key: String; var url: URL; var imageURL: URL? = nil; var channel: QRLoginChannel = .wechat }
+struct QRLogin: Sendable { var key: String; var url: URL; var imageURL: URL? = nil; var channel: QRLoginChannel = .wechat; var authenticationGeneration: Int? = nil }
 enum QRLoginStatus: Sendable { case waiting, scanned, expired, authorized(MusicAccount) }
 enum MusicError: LocalizedError, Sendable {
     case unsupported(String), authenticationRequired, unavailable(String), invalidResponse, server(Int, String), sessionChanged
@@ -60,6 +60,7 @@ enum MusicError: LocalizedError, Sendable {
         }
     }
 }
+
 
 
 

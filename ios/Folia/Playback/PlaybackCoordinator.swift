@@ -40,6 +40,9 @@ import Observation
     var duration: Double = 0
     var isPlaying = false
     var isPlaybackRequested = false
+    var audioPower: Double = 0
+    var audioBands: [Double] = [0, 0, 0, 0, 0]
+    var audioAnalysisAvailable = false
     private var lastPersistedPosition: Double = 0
     var isLoading = false
     var error: String?
@@ -64,6 +67,7 @@ import Observation
                 let length = self.player.currentItem?.duration.seconds ?? 0
                 if length.isFinite && length > 0 { self.duration = length }
                 self.isPlaying = self.player.timeControlStatus == .playing
+                self.updateAudioLevels()
                 if abs(self.currentTime - self.lastPersistedPosition) >= 10 {
                     self.persist(); self.lastPersistedPosition = self.currentTime
                 }
@@ -91,6 +95,7 @@ import Observation
     private func load(_ track: Track, position: Double, retry: Bool = false, autoplay: Bool = true) {
         loadTask?.cancel(); player.pause(); statusObservation = nil; player.replaceCurrentItem(with: nil)
         generation = UUID(); let request = generation
+        resources.audioAnalysis = nil; updateAudioLevels()
         currentTrack = track; lyrics = nil; lyricsError = nil; currentTime = position; duration = track.duration
         isPlaying = false; isPlaybackRequested = autoplay; isLoading = true; error = nil; retriedStream = retry
         loadTask = Task { [weak self] in
@@ -101,6 +106,10 @@ import Observation
                 guard source.url.scheme?.lowercased() == "https" || source.url.scheme?.lowercased() == "http" else { throw MusicError.unavailable("只允许在线播放地址。") }
                 let asset = AVURLAsset(url: source.url, options: ["AVURLAssetHTTPHeaderFieldsKey": source.headers])
                 let item = AVPlayerItem(asset: asset)
+                let analysis = NativeAudioAnalysis()
+                let attached = await analysis.attach(to: item)
+                try Task.checkCancellation(); guard generation == request else { return }
+                resources.audioAnalysis = attached ? analysis : nil
                 statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
                     Task { @MainActor in
                         guard let self, self.generation == request else { return }
@@ -138,7 +147,30 @@ import Observation
         persist(); updateNowPlaying()
     }
     func pause() {
-        isPlaybackRequested = false; player.pause(); isPlaying = false; persist(); updateNowPlaying()
+        isPlaybackRequested = false; player.pause(); isPlaying = false; updateAudioLevels(); persist(); updateNowPlaying()
+    }
+    private func updateAudioLevels() {
+        let measured = resources.audioAnalysis?.snapshot() ?? AudioAnalysisSnapshot()
+        audioAnalysisAvailable = measured.available
+        audioPower = isPlaying ? measured.power : 0
+        audioBands = isPlaying ? measured.bands : [0, 0, 0, 0, 0]
+    }
+
+    func queueSnapshot() -> PlaybackSnapshot {
+        PlaybackSnapshot(tracks: tracks.map(FoliaBackup.reference), index: queueState.index,
+                         position: currentTime, repeatMode: repeatMode, shuffle: shuffle, quality: quality)
+    }
+    func restoreQueue(_ snapshot: PlaybackSnapshot) throws {
+        let state = try snapshot.validated()
+        loadTask?.cancel(); artworkTask?.cancel(); generation = UUID(); statusObservation = nil
+        player.pause(); player.replaceCurrentItem(with: nil); resources.audioAnalysis = nil; updateAudioLevels()
+        tracks = state.tracks; queueState = PlaybackQueue(ids: tracks.map(\.id), index: state.index)
+        currentTrack = state.index.map { tracks[$0] }; currentTime = state.position
+        duration = currentTrack?.duration ?? 0; lyrics = nil; lyricsError = nil
+        nowPlayingArtwork = nil; artworkTrackID = nil; isLoading = false; error = nil
+        isPlaybackRequested = false; isPlaying = false
+        repeatMode = state.repeatMode; shuffle = state.shuffle; quality = state.quality
+        persist(); updateNowPlaying()
     }
     func savePlaybackState() { persist() }
     func seek(to seconds: Double) {
@@ -201,6 +233,8 @@ import Observation
         repeatMode = savedRepeat; shuffle = savedShuffle
     }
 }
+
+
 
 
 

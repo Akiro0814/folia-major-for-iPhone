@@ -55,11 +55,17 @@ extension PlaybackCoordinator {
         artworkTask?.cancel()
         if artworkTrackID == track.id && nowPlayingArtwork != nil { return }
         nowPlayingArtwork = nil; artworkTrackID = nil
-        guard let url = track.artworkURL, ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return }
+        guard let reference = track.artworkURL else { return }
+        let service = service
         artworkTask = Task { [weak self] in
             do {
+                let url = try await service.resolveArtworkURL(reference)
+                try Task.checkCancellation()
                 var request = URLRequest(url: url); request.timeoutInterval = 20
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let session = URLSession(configuration: .ephemeral)
+                defer { session.invalidateAndCancel() }
+                request.cachePolicy = .reloadIgnoringLocalCacheData
+                let (data, response) = try await session.data(for: request)
                 try Task.checkCancellation()
                 guard let self, self.currentTrack?.id == track.id, data.count < 10_000_000,
                       let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
@@ -81,6 +87,8 @@ extension PlaybackCoordinator {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
+
+
 
 
 

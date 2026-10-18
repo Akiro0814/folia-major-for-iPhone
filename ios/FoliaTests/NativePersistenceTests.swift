@@ -3,6 +3,16 @@ import XCTest
 
 // FoliaTests/NativePersistenceTests.swift — invalid imported visuals and local-library identities cannot enter iOS state.
 final class NativePersistenceTests: XCTestCase {
+    @MainActor func testNamedPalettesPersistWithoutAudioData() async throws {
+        let suite = "FoliaTests.palette.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let first = AppSettings(defaults: defaults)
+        first.palettes = [SavedPalette(name: "Forest", colors: ["#102010", "#FFFFFF", "#55AA66", "#CCCCCC"])]
+        let restored = AppSettings(defaults: defaults)
+        XCTAssertEqual(restored.palettes, first.palettes)
+        XCTAssertTrue(restored.favorites.isEmpty)
+    }
     func testLocalAudioProviderIsRejectedByPersistedTrackDecoder() {
         let json = #"{"mediaID":"file:///music/song.mp3","provider":"local","title":"Local audio","artist":"Local","album":"","duration":30}"#
         XCTAssertThrowsError(try JSONDecoder().decode(Track.self, from: Data(json.utf8)))
@@ -22,3 +32,4 @@ final class NativePersistenceTests: XCTestCase {
         XCTAssertNil(settings.themeColors)
     }
 }
+

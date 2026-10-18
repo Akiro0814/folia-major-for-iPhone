@@ -66,7 +66,12 @@ jobs:
         run: |
           mkdir -p artifacts/ios
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; matches=[v["udid"] for k,vs in d.items() if "iOS-26" in k for v in vs if v["name"].startswith("iPhone")]; assert matches,"iOS 26 simulator missing"; print(matches[0])')
+          echo "FOLIA_SIMULATOR=$DEVICE" >> "$GITHUB_ENV"
           xcodebuild test -project ios/Folia.xcodeproj -scheme Folia -destination "platform=iOS Simulator,id=$DEVICE" -parallel-testing-enabled NO -resultBundlePath artifacts/ios/Tests.xcresult CODE_SIGNING_ALLOWED=NO | tee artifacts/ios/tests.log
+      - name: Native anonymous provider probes
+        continue-on-error: true
+        run: |
+          TEST_RUNNER_FOLIA_LIVE_PROBES=1 xcodebuild test -project ios/Folia.xcodeproj -scheme Folia -destination "platform=iOS Simulator,id=$FOLIA_SIMULATOR" -only-testing:FoliaTests/LiveProviderTests -parallel-testing-enabled NO -resultBundlePath artifacts/ios/LiveProbes.xcresult CODE_SIGNING_ALLOWED=NO | tee artifacts/ios/live-probes.log
       - name: Build and validate unsigned IPA
         run: bash ios/Scripts/build-unsigned.sh
       - name: Export UI test screenshots
@@ -94,4 +99,5 @@ jobs:
             artifacts/ios/*.log
             artifacts/ios/screenshots
             artifacts/ios/Tests.xcresult
+            artifacts/ios/LiveProbes.xcresult
           retention-days: 14

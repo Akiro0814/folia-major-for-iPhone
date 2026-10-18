@@ -9,14 +9,16 @@ struct NavidromeLoginView: View {
     @State private var account: MusicAccount?
     @State private var error: String?
     @State private var busy = false
+    @State private var operationTask: Task<Void, Never>?
     var body: some View {
         Form {
             if let account {
                 Section {
                     Label(account.nickname, systemImage: "person.crop.circle")
                     Button(localized("断开服务器", "Disconnect server"), role: .destructive) {
-                        Task {
-                            do { try await playback.service.logout(provider: .navidrome); self.account = nil }
+                        operationTask?.cancel()
+                        operationTask = Task {
+                            do { try await playback.service.logout(provider: .navidrome); try Task.checkCancellation(); self.account = nil }
                             catch { self.error = error.localizedDescription }
                         }
                     }
@@ -27,13 +29,16 @@ struct NavidromeLoginView: View {
                     TextField(localized("用户名", "Username"), text: $username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
                     SecureField(localized("密码", "Password"), text: $password).textContentType(.password)
                     Button(localized("连接并验证", "Connect and verify")) {
-                        busy = true; error = nil
-                        Task {
+                        let submittedServer = server, submittedUsername = username, submittedPassword = password
+                        operationTask?.cancel(); busy = true; error = nil
+                        operationTask = Task {
                             defer { password = ""; busy = false }
                             do {
-                                try await playback.service.configureNavidrome(serverURL: server, username: username, password: password)
-                                account = await playback.service.account(provider: .navidrome)
-                            } catch { self.error = error.localizedDescription }
+                                try await playback.service.configureNavidrome(serverURL: submittedServer, username: submittedUsername, password: submittedPassword)
+                                try Task.checkCancellation()
+                                let result = await playback.service.account(provider: .navidrome)
+                                try Task.checkCancellation(); account = result
+                            } catch is CancellationError { } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
                         }
                     }.disabled(server.isEmpty || username.isEmpty || password.isEmpty || busy)
                 }
@@ -45,6 +50,7 @@ struct NavidromeLoginView: View {
             }
         }.navigationTitle("Navidrome")
         .task { account = await playback.service.account(provider: .navidrome) }
-        .onDisappear { password = "" }
+        .onDisappear { operationTask?.cancel(); password = "" }
     }
 }
+

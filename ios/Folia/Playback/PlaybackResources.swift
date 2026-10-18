@@ -4,6 +4,7 @@ import MediaPlayer
 // Folia/Playback/PlaybackResources.swift — nonisolated resource lifetime avoids actor deinitialization races.
 final class PlaybackResources {
     let player = AVPlayer()
+    var audioAnalysis: NativeAudioAnalysis?
     var loadTask: Task<Void, Never>?
     var artworkTask: Task<Void, Never>?
     var remoteTargets: [(MPRemoteCommand, Any)] = []
@@ -18,4 +19,5 @@ final class PlaybackResources {
         notifications.forEach { NotificationCenter.default.removeObserver($0) }
     }
 }
+
 

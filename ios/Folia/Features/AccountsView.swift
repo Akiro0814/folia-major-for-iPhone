@@ -20,6 +20,7 @@ struct LoginView: View {
     @State private var credential = ""
     @State private var message: String?
     @State private var busy = false
+    @State private var operationTask: Task<Void, Never>?
     @State private var qr: QRLogin?
     @State private var qrGeneration = 0
     @State private var qrChannel: QRLoginChannel = .wechat
@@ -31,7 +32,7 @@ struct LoginView: View {
         Form {
             if let account {
                 Section { Label(account.nickname, systemImage: "person.crop.circle.fill")
-                    Button(localized("退出登录", "Sign out"), role: .destructive) { perform { try await playback.service.logout(provider: provider); self.account = nil } }
+                    Button(localized("退出登录", "Sign out"), role: .destructive) { perform { try await playback.service.logout(provider: provider); try Task.checkCancellation(); self.account = nil } }
                 }
             } else if methods.isEmpty {
                 Section { Text(localized("此平台的设备直连登录协议暂未就绪。不会将其他应用的微信身份冒充本平台授权。", "Direct device sign-in is not available for this provider yet.")) }
@@ -57,12 +58,14 @@ struct LoginView: View {
                     TextField(localized("手机号 / 账户", "Phone / account"), text: $phone).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
                     if method == .sms {
                         TextField(localized("验证码", "Verification code"), text: $credential).textContentType(.oneTimeCode).keyboardType(.numberPad)
-                        Button(localized("发送验证码", "Send verification code")) { perform { try await playback.service.sendCode(phone: phone, provider: provider); message = localized("验证码已发送", "Code sent") } }.disabled(phone.isEmpty || busy)
+                        Button(localized("发送验证码", "Send verification code")) { perform { try await playback.service.sendCode(phone: phone, provider: provider); try Task.checkCancellation(); message = localized("验证码已发送", "Code sent") } }.disabled(phone.isEmpty || busy)
                     } else { SecureField(localized("密码", "Password"), text: $credential).textContentType(.password) }
                     Button(localized("登录", "Sign in")) {
+                        let submittedPhone = phone; let submittedCredential = credential; let submittedMethod = method
                         perform {
                             defer { credential = "" }
-                            account = try await playback.service.login(phone: phone, credential: credential, method: method, provider: provider)
+                            let result = try await playback.service.login(phone: submittedPhone, credential: submittedCredential, method: submittedMethod, provider: provider)
+                            try Task.checkCancellation(); account = result
                         }
                     }.disabled(phone.isEmpty || credential.isEmpty || busy)
                 }
@@ -97,7 +100,7 @@ struct LoginView: View {
             Task { await playback.service.cancelQR(provider: provider) }
         }
         .onDisappear {
-            credential = ""
+            operationTask?.cancel(); credential = ""
             Task { await playback.service.cancelQR(provider: provider) }
         }
     }
@@ -105,10 +108,17 @@ struct LoginView: View {
         switch method { case .sms: localized("短信验证码", "SMS code"); case .password: localized("账号密码", "Password"); case .qr: localized("扫码授权", "QR authorization") }
     }
     private func perform(_ operation: @escaping @MainActor () async throws -> Void) {
-        busy = true; message = nil
-        Task { do { try await operation() } catch { message = error.localizedDescription }; busy = false }
+        guard !busy else { return }
+        operationTask?.cancel(); busy = true; message = nil
+        operationTask = Task {
+            defer { busy = false }
+            do { try Task.checkCancellation(); try await operation() }
+            catch is CancellationError { }
+            catch { if !Task.isCancelled { message = error.localizedDescription } }
+        }
     }
 }
+
 
 
 

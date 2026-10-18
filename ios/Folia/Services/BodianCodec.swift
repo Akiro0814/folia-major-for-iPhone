@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 // ios/Folia/Services/BodianCodec.swift
 
 extension BodianProvider {
@@ -32,8 +33,14 @@ extension BodianProvider {
     }
     static func loginAccount(_ login: [String: Any]) throws -> MusicAccount {
         let user = login["userInfo"] as? [String: Any] ?? login["user"] as? [String: Any] ?? [:]
-        let identities = [login["id"], login["uid"], user["id"], user["uid"]].compactMap(OmniService.identifier)
-        guard let id = identities.first, (try? mediaID(id)) != nil, identities.allSatisfy({ $0 == id }),
+        let rawIdentities = [login["id"], login["uid"], user["id"], user["uid"]].compactMap { $0 }
+        guard rawIdentities.allSatisfy({ value in
+            guard let number = value as? NSNumber else { return value is String }
+            guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return false }
+            return number.doubleValue.isFinite && number.doubleValue.rounded() == number.doubleValue && number.doubleValue <= 9_007_199_254_740_991
+        }) else { throw MusicError.invalidResponse }
+        let identities = rawIdentities.compactMap(OmniService.identifier)
+        guard let id = identities.first, (1...20).contains(id.count), id.first != "0", id.allSatisfy({ $0.isASCII && $0.isNumber }), identities.allSatisfy({ $0 == id }),
               let token = login["token"] as? String, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MusicError.invalidResponse }
         return MusicAccount(id: id, provider: .bodian, nickname: user["nickname"] as? String ?? "波点用户",
                             avatarURL: (user["headImg"] as? String ?? user["avatarUrl"] as? String).flatMap(URL.init(string:)))

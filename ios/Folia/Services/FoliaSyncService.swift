@@ -5,7 +5,11 @@ import Security
 /// Manual cross-platform settings synchronization using the existing Folia sync-server contract.
 actor FoliaSyncService {
     private let session: URLSession
-    init(session: URLSession = .shared) { self.session = session }
+    init(session: URLSession? = nil) {
+        let network = URLSessionConfiguration.ephemeral
+        network.httpShouldSetCookies = false; network.urlCache = nil
+        self.session = session ?? URLSession(configuration: network)
+    }
 
     func download(server: String, token: String, existing: VisualSettings) async throws -> VisualSettings? {
         guard let record = try await read(server: server, token: token) else { return nil }
@@ -37,7 +41,7 @@ actor FoliaSyncService {
         parts.path = parts.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         parts.path = (parts.path.isEmpty ? "" : "/" + parts.path) + "/settings"
         guard let url = parts.url else { throw MusicError.invalidResponse }
-        var request = URLRequest(url: url); request.httpMethod = method; request.httpBody = body; request.timeoutInterval = 30
+        var request = URLRequest(url: url); request.httpMethod = method; request.httpBody = body; request.timeoutInterval = 30; request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
@@ -48,12 +52,33 @@ actor FoliaSyncService {
         guard data.count < 4_000_000 else { throw MusicError.unavailable("同步设置过大。") }
         return data
     }
+    // Introducing the modern bundle disables ALL legacy tuning keys on desktop, so migrate every legacy mode first.
+    private static func tuningBundle(_ data: [String: Any]) -> [String: Any] {
+        let modes = ["classic", "cadenza", "partita", "fume", "claddagh", "cappella", "tilt", "diorama", "monet", "pendolo", "sonnet", "tempera", "lumiere"]
+        var bundle = data["visualizerTunings"] as? [String: Any] ?? [:]
+        if data["visualizerTunings"] == nil {
+            for mode in modes { if let value = data[mode + "Tuning"] as? [String: Any] { bundle[mode] = value } }
+        }
+        for mode in ["monet", "nomand", "latent", "sora"] {
+            if let value = data[mode + "BackgroundTuning"] as? [String: Any] { bundle[mode + "_background"] = value }
+        }
+        return bundle
+    }
+    private static func mergeObjects(_ updates: [String: Any], into existing: [String: Any]) -> [String: Any] {
+        var result = existing
+        for (key, value) in updates {
+            if let object = value as? [String: Any], let original = existing[key] as? [String: Any] { result[key] = mergeObjects(object, into: original) }
+            else { result[key] = value }
+        }
+        return result
+    }
     private static func validate(_ record: [String: Any]) throws {
         guard record["schemaVersion"] as? Int == 1, record["data"] is [String: Any], record["updatedAt"] is String else {
             throw MusicError.unavailable("同步设置格式不兼容；未修改本地或服务器配置。")
         }
     }
     static func merge(_ visual: VisualSettings, into existing: [String: Any]?) throws -> [String: Any] {
+        _ = try visual.validated()
         if let existing { try validate(existing) }
         var record = existing ?? ["schemaVersion": 1]
         var data = record["data"] as? [String: Any] ?? [:]
@@ -63,6 +88,21 @@ actor FoliaSyncService {
         data["hidePlayerTranslationSubtitle"] = !visual.showTranslation
         data["subtitleContentMode"] = visual.showRomanization ? (visual.showTranslation ? "both" : "romanization") : (visual.showTranslation ? "translation" : "none")
         data["lyricsFontScale"] = visual.fontSize / 36
+        if let tunings = visual.visualizerTunings {
+            let encoded = try JSONEncoder().encode(tunings)
+            guard let updates = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else { throw MusicError.invalidResponse }
+            let backgroundKeys = Set(["monet", "nomand", "latent", "sora"].map { $0 + "_background" })
+            let rendererUpdates = updates.filter { !backgroundKeys.contains($0.key) }
+            if !rendererUpdates.isEmpty {
+                let existingBundle = Self.tuningBundle(data).filter { !backgroundKeys.contains($0.key) }
+                data["visualizerTunings"] = Self.mergeObjects(rendererUpdates, into: existingBundle)
+            }
+            for mode in ["monet", "nomand", "latent", "sora"] {
+                if let value = updates[mode + "_background"] as? [String: Any] {
+                    data[mode + "BackgroundTuning"] = Self.mergeObjects(value, into: data[mode + "BackgroundTuning"] as? [String: Any] ?? [:])
+                }
+            }
+        }
         let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         record["updatedAt"] = formatter.string(from: Date()); record["data"] = data
         return record
@@ -73,6 +113,7 @@ actor FoliaSyncService {
         var visual = existing
         if let renderer = data["visualizerMode"] as? String { visual.renderer = renderer }
         if let background = data["visualizerBackgroundMode"] as? String { visual.background = background }
+        else if data["visualizerBackgroundMode"] is NSNull { visual.background = "common" }
         if let scale = data["lyricsFontScale"] as? NSNumber {
             let size = scale.doubleValue * 36
             guard size.isFinite, (14...96).contains(size) else { throw MusicError.invalidResponse }
@@ -83,7 +124,11 @@ actor FoliaSyncService {
             visual.showRomanization = ["both", "romanization"].contains(content)
             visual.showTranslation = ["both", "translation"].contains(content)
         }
-        return visual
+        let tunings = Self.tuningBundle(data)
+        if !tunings.isEmpty {
+            visual.visualizerTunings = try JSONDecoder().decode([String: [String: TuningValue]].self, from: JSONSerialization.data(withJSONObject: tunings))
+        }
+        return try visual.validated()
     }
 }
 

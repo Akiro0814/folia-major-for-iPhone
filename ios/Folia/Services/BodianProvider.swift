@@ -8,12 +8,14 @@ actor BodianProvider {
     private var generation = UUID()
     private var pendingQR: (key: String, expires: Date)?
     private let deviceID: String
-    init(session: URLSession = .shared) {
-        self.session = session
+    init(session: URLSession? = nil) {
+        let network = URLSessionConfiguration.ephemeral
+        network.httpShouldSetCookies = false; network.urlCache = nil
+        self.session = session ?? URLSession(configuration: network)
         saved = (try? SessionVault().read(.bodian)) ?? ProviderSession()
         let defaults = UserDefaults.standard
         let device = defaults.string(forKey: "folia.bodian.device") ?? UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        deviceID = device; defaults.set(device, forKey: "folia.bodian.device")
+        deviceID = device.lowercased(); defaults.set(deviceID, forKey: "folia.bodian.device")
     }
     func account() -> MusicAccount? {
         guard saved.cookies["uid"] == saved.account?.id, saved.cookies["token"]?.isEmpty == false else { return nil }
@@ -57,6 +59,7 @@ actor BodianProvider {
     func startQR() async throws -> QRLogin {
         let result = try await data("/api/ucenter/login/qrCode", signed: true, anonymous: true)
         guard let key = result["qrCode"] as? String, !key.isEmpty else { throw MusicError.invalidResponse }
+        try Task.checkCancellation()
         pendingQR = (key, Date().addingTimeInterval(300))
         let value = "https://bodian-oia.kuwo.cn/bodian/download.html?" + Self.queryString([("pageName", "login_pc"), ("pt", "3"), ("id", key)])
         guard let url = URL(string: value) else { throw MusicError.invalidResponse }; return QRLogin(key: key, url: url)
@@ -84,11 +87,15 @@ actor BodianProvider {
         }
     }
     func playlists() async throws -> [MusicCollection] {
+        let revision = generation
         guard let user = account() else { throw MusicError.authenticationRequired }
         let fields = [("userId", user.id), ("fromUid", user.id)]
         let owned = try await data("/api/service/playlist/userCreate", fields: fields)
+        guard revision == generation else { throw MusicError.sessionChanged }
         let liked = try await data("/api/service/playlist/fond", fields: fields)
+        guard revision == generation else { throw MusicError.sessionChanged }
         let collected = try await data("/api/service/collect/4/list", fields: fields + [("pn", "1"), ("rn", "100")])
+        guard revision == generation else { throw MusicError.sessionChanged }
         var entries = (owned["playLists"] as? [[String: Any]] ?? []).compactMap { Self.collection($0, owned: true) }
         if let fond = Self.collection(liked, owned: true) { entries.append(fond) }
         entries += (collected["playLists"] as? [[String: Any]] ?? []).filter { Self.number($0["sourceType"]) != 6 }.compactMap { Self.collection($0) }
@@ -146,7 +153,7 @@ actor BodianProvider {
         let text = encodedBody.map { String(decoding: $0, as: UTF8.self) } ?? ""
         if signed { fields.append(("timestamp", String(Int64(Date().timeIntervalSince1970 * 1000)))); fields.append(("sign", Self.signature(path: path, fields: fields, body: text))) }
         guard let url = URL(string: (lyric ? "https://mlyric.kuwo.cn" : "https://bd-api.kuwo.cn") + path + "?" + Self.queryString(fields)) else { throw MusicError.invalidResponse }
-        var request = URLRequest(url: url); request.httpMethod = method; request.httpBody = encodedBody; request.timeoutInterval = 30
+        var request = URLRequest(url: url); request.httpMethod = method; request.httpBody = encodedBody; request.timeoutInterval = 30; request.cachePolicy = .reloadIgnoringLocalCacheData
         let headers = ["User-Agent": "Dart/3.3 (dart:io)", "plat": "win", "channel": "W1", "ver": "1.1.7", "svrver": "13", "api-ver": "application/json", "brand": "Windows", "net": "wifi", "devid": deviceID, "qimei36": deviceID, "Content-Type": "application/json"]
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         if let user { request.setValue(user.id, forHTTPHeaderField: "uid"); request.setValue(token, forHTTPHeaderField: "token") }
@@ -159,6 +166,9 @@ actor BodianProvider {
         }
         try Task.checkCancellation(); guard revision == generation else { throw MusicError.sessionChanged }
         guard bytes.count < 8 * 1024 * 1024, let root = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { throw MusicError.invalidResponse }
+        if Self.number(root["code"]) == 11012, !anonymous {
+            try logout(); throw MusicError.authenticationRequired
+        }
         guard Self.number(root["code"]) == 200 else { throw MusicError.server(Self.number(root["code"]) ?? -1, root["msg"] as? String ?? root["message"] as? String ?? "波点音乐拒绝了请求") }
         guard let value = root["data"] as? [String: Any] else {
             if root["data"] == nil || root["data"] is NSNull || (root["data"] as? [Any])?.isEmpty == true { return [:] }

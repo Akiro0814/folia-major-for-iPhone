@@ -2,6 +2,7 @@ import Foundation
 // ios/Folia/Services/KuGouLibrary.swift
 
 extension PublicDiscoveryTransport {
+    // Advance by raw page size so mixed library pages do not truncate later playlists.
     func kugouPlaylists() async throws -> [MusicCollection] {
         guard let user = kugouSession.account, let token = kugouSession.cookies["token"] else { throw MusicError.authenticationRequired }
         var result: [MusicCollection] = [], page = 1
@@ -15,11 +16,15 @@ extension PublicDiscoveryTransport {
             for item in items {
                 guard let listID = OmniService.identifier(item["listid"]), seen.insert(listID).inserted else { continue }
                 let globalID = OmniService.identifier(item["global_collection_id"])
+                let isAlbum = item["source"] as? Int == 2 || item["musiclib_id"] != nil
+                let collectionID = isAlbum ? OmniService.identifier(item["album_id"] ?? item["musiclib_id"] ?? item["list_create_listid"]) ?? listID : globalID ?? listID
+                var metadata = ["listid": listID, "globalID": globalID ?? "", "owner": (item["type"] as? Int ?? 0) == 0 ? user.id : OmniService.identifier(item["create_userid"]) ?? ""]
+                if isAlbum { metadata["kind"] = "album"; metadata["owner"] = "" }
                 let image = (item["pic"] as? String ?? item["img"] as? String)?.replacingOccurrences(of: "{size}", with: "480")
-                result.append(MusicCollection(id: globalID ?? listID, provider: .kugou,
-                    title: item["name"] as? String ?? item["listname"] as? String ?? "歌单", artworkURL: image.flatMap(URL.init(string:)),
+                result.append(MusicCollection(id: collectionID, provider: .kugou,
+                    title: item["name"] as? String ?? item["listname"] as? String ?? item["album_name"] as? String ?? "歌单", artworkURL: image.flatMap(URL.init(string:)),
                     trackCount: item["count"] as? Int ?? item["songcount"] as? Int ?? 0,
-                    providerData: ["listid": listID, "globalID": globalID ?? "", "owner": OmniService.identifier(item["create_userid"]) ?? user.id]))
+                    providerData: metadata))
                 fresh += 1
             }
             if items.count < 100 || fresh == 0 { break }
@@ -28,6 +33,7 @@ extension PublicDiscoveryTransport {
         }
         return result
     }
+    // Preserve source hashes while stopping on an empty or repeated upstream page.
     func kugouTracks(in collection: MusicCollection) async throws -> [Track] {
         guard let listID = collection.providerData["listid"] else { throw MusicError.invalidResponse }
         guard let user = kugouSession.account, let token = kugouSession.cookies["token"] else { throw MusicError.authenticationRequired }
@@ -90,17 +96,27 @@ extension PublicDiscoveryTransport {
     }
     nonisolated static func normalizeKugou(_ item: [String: Any]) -> Track? {
         let audio = item["audio_info"] as? [String: Any] ?? [:]
-        guard let hash = item["hash"] as? String ?? item["FileHash"] as? String ?? audio["hash"] as? String else { return nil }
-        let title = item["songname"] as? String ?? item["SongName"] as? String ?? item["OriSongName"] as? String ?? item["filename"] as? String ?? item["name"] as? String ?? "歌曲"
-        let artist = item["singername"] as? String ?? item["SingerName"] as? String ?? ""
-        let image = (item["Image"] as? String ?? item["album_sizable_cover"] as? String)?.replacingOccurrences(of: "{size}", with: "480")
+        let base = item["base"] as? [String: Any] ?? [:]
+        let album = item["album_info"] as? [String: Any] ?? [:]
+        func text(_ values: [String: Any], _ keys: [String]) -> String? {
+            keys.lazy.compactMap { values[$0] as? String }.first
+        }
+        guard let hash = text(item, ["hash", "FileHash"]) ?? text(audio, ["hash"]) else { return nil }
+        let title = text(item, ["songname", "SongName", "OriSongName", "filename", "name"]) ?? text(base, ["audio_name"]) ?? "歌曲"
+        let artist = text(item, ["singername", "SingerName"]) ?? text(base, ["author_name"]) ?? ""
+        let image = (text(item, ["Image", "album_sizable_cover"]) ?? text(album, ["cover"]))?.replacingOccurrences(of: "{size}", with: "480")
         var metadata: [String: String] = [:]
         metadata["fileID"] = OmniService.identifier(item["fileid"] ?? item["FileID"])
-        metadata["albumID"] = OmniService.identifier(item["album_id"] ?? item["AlbumID"])
-        metadata["mixsongID"] = OmniService.identifier(item["mixsongid"] ?? item["MixSongID"])
+        metadata["albumID"] = OmniService.identifier(item["album_id"] ?? item["AlbumID"] ?? base["album_id"])
+        metadata["mixsongID"] = OmniService.identifier(item["mixsongid"] ?? item["MixSongID"] ?? base["album_audio_id"])
+        let durationSeconds = item["duration"] as? Double ?? item["Duration"] as? Double
+        let milliseconds = audio["duration"] as? Double ?? item["timelen"] as? Double ?? 0
         return Track(mediaID: hash, provider: .kugou, title: title, artist: artist,
-            album: item["album_name"] as? String ?? item["AlbumName"] as? String ?? "", artworkURL: image.flatMap(URL.init(string:)),
-            duration: item["duration"] as? Double ?? item["Duration"] as? Double ?? (item["timelen"] as? Double ?? 0) / 1000, providerData: metadata)
+            album: text(item, ["album_name", "AlbumName"]) ?? text(album, ["album_name"]) ?? "", artworkURL: image.flatMap(URL.init(string:)),
+            duration: durationSeconds ?? milliseconds / 1000, providerData: metadata)
     }
 }
+
+
+
 

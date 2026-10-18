@@ -30,6 +30,7 @@ struct CommandsView: View {
                     action(localized("取消睡眠定时", "Cancel sleep timer"), icon: "moon.zzz") { playback.setSleep(minutes: nil) }
                 }
                 Section(localized("服务与音质", "Services & quality")) {
+                    if matches(localized("应用备份", "App backup")) { NavigationLink { BackupView() } label: { Label(localized("应用备份", "App backup"), systemImage: "externaldrive") } }
                     if matches(localized("账户与音乐服务", "Accounts & services")) { NavigationLink { AccountsView() } label: { Label(localized("账户与音乐服务", "Accounts & services"), systemImage: "person.crop.circle") } }
                     ForEach(MusicProvider.allCases) { provider in
                         action(localized("切换平台：", "Provider: ") + provider.displayName, icon: "music.note") { settings.preferredProvider = provider }
@@ -69,4 +70,5 @@ struct CommandsView: View {
         if matches(title) { Button { operation() } label: { Label(title, systemImage: icon) } }
     }
 }
+
 

@@ -7,10 +7,10 @@ extension PublicDiscoveryTransport {
         let response = try await kugou("/v1/search/\(type)", params: ["albumhide": "0", "iscorrection": "1", "keyword": query,
             "nocollect": "0", "page": "1", "pagesize": "50", "platform": "AndroidFilter"], router: "complexsearch.kugou.com")
         return Self.kugouItems(response).compactMap { item in
-            let rawID = kind == .album ? item["AlbumID"] ?? item["album_id"] : item["AuthorId"] ?? item["author_id"] ?? item["SingerId"]
+            let rawID = kind == .album ? item["albumid"] ?? item["AlbumID"] ?? item["album_id"] : item["AuthorId"] ?? item["author_id"] ?? item["SingerId"]
             guard let id = OmniService.identifier(rawID) else { return nil }
-            let name = item["AlbumName"] as? String ?? item["album_name"] as? String ?? item["AuthorName"] as? String ?? item["SingerName"] as? String ?? ""
-            let image = (item["Img"] as? String ?? item["SizableCover"] as? String ?? item["Avatar"] as? String)?.replacingOccurrences(of: "{size}", with: "480")
+            let name = item["albumname"] as? String ?? item["AlbumName"] as? String ?? item["album_name"] as? String ?? item["AuthorName"] as? String ?? item["SingerName"] as? String ?? ""
+            let image = (item["img"] as? String ?? item["Img"] as? String ?? item["SizableCover"] as? String ?? item["Avatar"] as? String)?.replacingOccurrences(of: "{size}", with: "480")
             return MusicCollection(id: id, provider: .kugou, title: name, artworkURL: image.flatMap(URL.init(string:)), providerData: ["kind": kind.rawValue])
         }
     }
@@ -38,3 +38,4 @@ extension PublicDiscoveryTransport {
         return tracks
     }
 }
+

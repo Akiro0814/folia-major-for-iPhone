@@ -4,6 +4,15 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 // ios-web/lyrics.ts
 export interface LyricPayload { original?: string; translation?: string; romanization?: string; wordTimed?: string }
+function unwrapQRC(text: string): string {
+  if (!text.includes('LyricContent=')) return text;
+  const document = new DOMParser().parseFromString(text, 'application/xml');
+  const nodes = document.getElementsByTagName('*');
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].hasAttribute('LyricContent')) return nodes[i].getAttribute('LyricContent') ?? '';
+  }
+  return text;
+}
 // The shared AMLL parser expects Apple line IDs even for otherwise valid standard TTML.
 function withLineIdentifiers(text: string): string {
   const document = new DOMParser().parseFromString(text, 'application/xml');
@@ -17,15 +26,11 @@ function withLineIdentifiers(text: string): string {
 }
 export function parseNativeLyrics(payload?: LyricPayload): Line[] {
   if (!payload) return [];
-  const { original = '', wordTimed = '', translation = '', romanization = '' } = payload;
-  let text = wordTimed || original;
-  if (text.includes('LyricContent=')) {
-    const document = new DOMParser().parseFromString(text, 'application/xml');
-    const nodes = document.getElementsByTagName('*');
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].hasAttribute('LyricContent')) { text = nodes[i].getAttribute('LyricContent') ?? ''; break; }
-    }
-  }
+  const original = unwrapQRC(payload.original ?? '');
+  const wordTimed = unwrapQRC(payload.wordTimed ?? '');
+  const translation = unwrapQRC(payload.translation ?? '');
+  const romanization = unwrapQRC(payload.romanization ?? '');
+  const text = wordTimed || original;
   if (/<(?:\w+:)?tt(?:\s|>)/i.test(text)) return parseTTML(withLineIdentifiers(text), translation, {}, romanization).lines;
   if (/^\[\d+,\d+\]\(\d+,\d+,\d+\)/m.test(text)) return parseYRC(text, translation, {}, romanization).lines;
   if (/^\[\d+,\d+\].*\(\d+,\d+\)/m.test(text)) return parseQRC(text, translation, {}, romanization).lines;

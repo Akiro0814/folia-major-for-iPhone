@@ -7,13 +7,14 @@ struct FoliaSyncView: View {
     @State private var token = FoliaSyncCredentials().read()
     @State private var busy = false
     @State private var message: String?
+    @State private var task: Task<Void, Never>?
     private let service = FoliaSyncService()
 
     var body: some View {
         Form {
             Section(localized("自托管 Folia 同步服务器", "Self-hosted Folia sync server")) {
-                TextField("https://sync.example.com", text: $server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                SecureField("SYNC_TOKEN", text: $token).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("https://sync.example.com", text: $server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().disabled(busy)
+                SecureField("SYNC_TOKEN", text: $token).textInputAutocapitalization(.never).autocorrectionDisabled().disabled(busy)
                 Text(localized("使用原项目 sync-server 地址与令牌。令牌保存在钥匙串。公网服务器请使用 HTTPS。", "Use your existing Folia sync-server URL and token. The token stays in Keychain. Use HTTPS for public servers.")).font(.footnote).foregroundStyle(.secondary)
             }
             Section {
@@ -27,21 +28,27 @@ struct FoliaSyncView: View {
             }
         }
         .navigationTitle(localized("外观同步", "Appearance sync"))
+        .onDisappear { task?.cancel() }
     }
     private func synchronize(upload: Bool) {
         busy = true; message = nil
-        Task { @MainActor in
+        let original = settings.visual
+        let requestedServer = server, requestedToken = token
+        task = Task { @MainActor in
             defer { busy = false }
             do {
                 if upload {
-                    try await service.upload(settings.visual, server: server, token: token)
+                    try await service.upload(original, server: requestedServer, token: requestedToken)
                     message = localized("外观设置已上传", "Appearance uploaded")
-                } else if let visual = try await service.download(server: server, token: token, existing: settings.visual) {
+                } else if let visual = try await service.download(server: requestedServer, token: requestedToken, existing: original) {
                     guard VisualMode.bundled.contains(where: { $0.mode == visual.renderer }) else { throw MusicError.unavailable("服务器歌词模式不在当前版本中。") }
-                    settings.visual = visual
+                    try Task.checkCancellation()
+                    guard settings.visual == original else { throw MusicError.unavailable("下载期间本地外观已修改，请重新下载。") }
+                    settings.visual = try visual.validated(allowedRenderers: VisualMode.bundled.map(\.mode))
                     message = localized("外观设置已下载", "Appearance downloaded")
                 } else { message = localized("服务器暂无外观设置", "The server has no appearance settings") }
-                try FoliaSyncCredentials().save(token)
+                try Task.checkCancellation()
+                try FoliaSyncCredentials().save(requestedToken)
             } catch { message = error.localizedDescription }
         }
     }

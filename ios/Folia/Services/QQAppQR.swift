@@ -3,6 +3,7 @@ import Foundation
 
 extension QQProvider {
     func cancelQR() {
+        generation += 1
         qrTask?.cancel(); qrTask = nil
         qrHeartbeat?.cancel(); qrHeartbeat = nil
         if let socket = qrSocket { Task { await socket.close() } }
@@ -88,3 +89,4 @@ extension QQProvider {
         if let socket = qrSocket { Task { await socket.close() } }
     }
 }
+

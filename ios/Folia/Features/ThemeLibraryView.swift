@@ -59,7 +59,7 @@ struct ThemeLibraryView: View {
         colors.map { color in
             var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
             UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-            return String(format: "#%02X%02X%02X", Int(red * 255), Int(green * 255), Int(blue * 255))
+            return String(format: "#%02X%02X%02X", Int(min(max(red, 0), 1) * 255), Int(min(max(green, 0), 1) * 255), Int(min(max(blue, 0), 1) * 255))
         }
     }
     private func color(_ hex: String) -> Color {
@@ -67,3 +67,4 @@ struct ThemeLibraryView: View {
         return Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
     }
 }
+

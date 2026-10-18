@@ -17,6 +17,9 @@ final class BodianTests: XCTestCase {
     func testAccountExchangeRejectsContradictoryIdentities() {
         XCTAssertThrowsError(try BodianProvider.loginAccount(["id": "1", "token": "t", "userInfo": ["uid": "2"]]))
         XCTAssertNoThrow(try BodianProvider.loginAccount(["id": "1", "token": "t", "userInfo": ["uid": "1", "nickname": "Test"]]))
+        XCTAssertNoThrow(try BodianProvider.loginAccount(["id": "12345678901234567890", "token": "t", "userInfo": ["uid": "12345678901234567890"]]))
+        XCTAssertThrowsError(try BodianProvider.loginAccount(["id": NSNumber(value: 9_007_199_254_740_992 as Int64), "token": "t"]))
+        XCTAssertThrowsError(try BodianProvider.loginAccount(["id": true, "token": "t"]))
     }
     func testPreviewNeverBecomesFullTrack() {
         XCTAssertThrowsError(try BodianProvider.validateRights(["status": 3, "audition": ["url": "https://example.test/clip.mp3"]]))

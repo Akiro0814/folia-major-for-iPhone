@@ -6,8 +6,8 @@ actor PublicDiscoveryTransport {
     private let mid: String
     var kugouSession: ProviderSession
     var generation = 0
-    init() {
-        kugouSession = (try? SessionVault().read(.kugou)) ?? ProviderSession()
+    init(initialSession: ProviderSession? = nil) {
+        kugouSession = initialSession ?? (try? SessionVault().read(.kugou)) ?? ProviderSession()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 25
         network = URLSession(configuration: config)
@@ -28,7 +28,8 @@ actor PublicDiscoveryTransport {
     func stream(_ track: Track, quality: AudioQuality) async throws -> AudioSource {
         guard track.provider == .kugou else { throw MusicError.unsupported("QQ 音乐播放授权尚未完成。") }
         let hash = track.mediaID.lowercased()
-        let key = ProtocolCrypto.md5("\(hash)57ae12eb6890223e355ccfcb74edf70d1005\(mid)0")
+        let userid = kugouSession.cookies["userid"] ?? "0"
+        let key = ProtocolCrypto.md5("\(hash)57ae12eb6890223e355ccfcb74edf70d1005\(mid)\(userid)")
         let result = try await kugou("/v5/url", params: ["album_id": track.providerData["albumID"] ?? "0", "area_code": "1", "hash": hash,
             "ssa_flag": "is_fromtrack", "version": "11430", "page_id": "151369488",
             "quality": quality == .standard ? "128" : quality == .high ? "320" : "flac", "album_audio_id": track.providerData["mixsongID"] ?? "0",
@@ -42,7 +43,7 @@ actor PublicDiscoveryTransport {
     }
     func lyrics(_ track: Track) async throws -> LyricsPayload {
         guard track.provider == .kugou else { throw MusicError.unsupported("QQ 音乐歌词协议尚未完成。") }
-        let search = try await kugou("/v1/search", params: ["album_audio_id": "0", "appid": "1005", "clientver": "20489",
+        let search = try await kugou("/v1/search", params: ["album_audio_id": track.providerData["mixsongID"] ?? "0", "appid": "1005", "clientver": "20489",
             "duration": String(Int(track.duration * 1000)), "hash": track.mediaID, "keyword": "\(track.artist) \(track.title)",
             "lrctxt": "1", "man": "no"], base: "https://lyrics.kugou.com", defaults: false)
         guard let candidate = (search["candidates"] as? [[String: Any]])?.first,
@@ -135,6 +136,8 @@ actor PublicDiscoveryTransport {
         return value
     }
 }
+
+
 
 
 

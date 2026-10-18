@@ -8,18 +8,24 @@ struct FoliaLyricsView: View {
     var currentTime: Double
     var isPlaying: Bool
     var settings: VisualSettings
+    var audioPower: Double = 0
+    var audioBands: [Double] = [0, 0, 0, 0, 0]
     var onSeek: ((Double) -> Void)? = nil
     var onReadiness: ((Bool) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(PlaybackCoordinator.self) private var playback
+    @ScaledMetric(relativeTo: .body) private var dynamicScale = 1.0
     @State private var failure: String?
+    @State private var resolvedArtwork: URL?
 
     var body: some View {
         ZStack {
             LyricsWebSurface(track: track, lyrics: lyrics, currentTime: currentTime, isPlaying: isPlaying,
-                settings: settings, daylight: colorScheme == .light, reduceMotion: reduceMotion,
-                visible: scenePhase == .active, onSeek: onSeek, onReadiness: onReadiness, failure: $failure)
+                settings: scaledSettings, daylight: colorScheme == .light, reduceMotion: reduceMotion,
+                visible: scenePhase == .active, artwork: resolvedArtwork, audioPower: audioPower, audioBands: audioBands,
+                onSeek: onSeek, onReadiness: onReadiness, failure: $failure)
                 .accessibilityHidden(true)
             if failure != nil {
                 ScrollView {
@@ -32,7 +38,25 @@ struct FoliaLyricsView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(lyrics?.original ?? localized("暂无歌词", "No lyrics"))
+        .accessibilityLabel(readableLyrics)
+        .task(id: track?.artworkURL) {
+            resolvedArtwork = nil
+            guard let reference = track?.artworkURL else { return }
+            do {
+                let url = try await playback.service.resolveArtworkURL(reference)
+                try Task.checkCancellation()
+                resolvedArtwork = url
+            } catch { /* Artwork is optional; lyric rendering continues independently. */ }
+        }
+    }
+    private var scaledSettings: VisualSettings {
+        var copy = settings
+        copy.fontSize = min(96, max(14, settings.fontSize * dynamicScale))
+        return copy
+    }
+    private var readableLyrics: String {
+        guard let text = lyrics?.original, !text.isEmpty else { return localized("暂无歌词", "No lyrics") }
+        return text.replacingOccurrences(of: "\\[[^\\]]*\\]|<\\d+,\\d+(?:,\\d+)?>|\\(\\d+,\\d+(?:,\\d+)?\\)", with: "", options: .regularExpression)
     }
 }
 
@@ -45,6 +69,9 @@ private struct LyricsWebSurface: UIViewRepresentable {
     var daylight: Bool
     var reduceMotion: Bool
     var visible: Bool
+    var artwork: URL?
+    var audioPower: Double
+    var audioBands: [Double]
     var onSeek: ((Double) -> Void)?
     var onReadiness: ((Bool) -> Void)?
     @Binding var failure: String?
@@ -52,6 +79,7 @@ private struct LyricsWebSurface: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.add(context.coordinator, name: "folia")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator
@@ -98,10 +126,12 @@ private struct LyricsWebSurface: UIViewRepresentable {
                 "duration": max(0, parent.track?.duration ?? 0), "playing": parent.isPlaying,
                 "visible": parent.visible, "title": parent.track?.title ?? "",
                 "artist": parent.track?.artist ?? "", "album": parent.track?.album ?? "",
-                "coverUrl": parent.track?.artworkURL?.absoluteString ?? "",
+                "coverUrl": parent.artwork?.absoluteString ?? "",
                 "lyrics": (try? JSONSerialization.jsonObject(with: lyricData)) ?? [:],
                 "settings": (try? JSONSerialization.jsonObject(with: settingsData)) ?? [:],
                 "daylight": parent.daylight, "reduceMotion": parent.reduceMotion,
+                "audioPower": parent.audioPower.isFinite ? parent.audioPower : 0,
+                "audioBands": parent.audioBands.map { $0.isFinite ? $0 : 0 },
             ]
             Task { [weak self, weak webView] in
                 do {

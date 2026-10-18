@@ -7,6 +7,7 @@ struct PlayerView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
     @State private var showQueue = false
+    @State private var showFullscreenLyrics = false
     @State private var seekPosition: Double = 0
     @State private var seeking = false
     var body: some View {
@@ -35,15 +36,17 @@ struct PlayerView: View {
                 Spacer()
                 Text(localized("正在播放", "Now playing")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer()
+                Button { showFullscreenLyrics = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.accessibilityLabel(localized("全屏歌词", "Fullscreen lyrics"))
                 Button { showQueue = true } label: { Image(systemName: "list.bullet") }.accessibilityLabel(localized("播放队列", "Queue"))
             }.padding().glassEffect(.regular, in: .capsule).padding(.horizontal)
         }
         .sheet(isPresented: $showQueue) { QueueView() }
+        .fullScreenCover(isPresented: $showFullscreenLyrics) { FullscreenLyricsView() }
     }
     private var lyricStage: some View {
         VStack(spacing: 8) {
             if let lyricsError = playback.lyricsError { Text(lyricsError).font(.caption).foregroundStyle(.secondary).accessibilityLabel(localized("歌词请求失败", "Lyrics request failed") + ": " + lyricsError) }
-            FoliaLyricsView(track: playback.currentTrack, lyrics: playback.lyrics, currentTime: playback.currentTime, isPlaying: playback.isPlaying, settings: settings.visual, onSeek: { playback.seek(to: $0) })
+            FoliaLyricsView(track: playback.currentTrack, lyrics: playback.lyrics, currentTime: playback.currentTime, isPlaying: playback.isPlaying, settings: settings.visual, audioPower: playback.audioPower, audioBands: playback.audioBands, onSeek: { playback.seek(to: $0) })
             .clipShape(.rect(cornerRadius: 24))
         }
     }
@@ -66,6 +69,9 @@ struct PlayerView: View {
                 }
             }
             if playback.isLoading { ProgressView() }
+            if playback.isPlaying && !playback.audioAnalysisAvailable {
+                Text(localized("当前音频流暂未提供实时频谱；歌词继续正常显示", "Live spectrum is unavailable for this stream; lyrics remain available")).font(.caption).foregroundStyle(.secondary)
+            }
             if let error = playback.error { Text(error).font(.caption).foregroundStyle(.red) }
             VStack(spacing: 4) {
                 Slider(value: Binding(get: { seeking ? seekPosition : playback.currentTime }, set: { seekPosition = $0 }), in: 0...max(playback.duration, 1)) { editing in
@@ -122,6 +128,8 @@ struct QueueView: View {
         }
     }
 }
+
+
 
 
 

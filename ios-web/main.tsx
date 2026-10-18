@@ -27,15 +27,18 @@ type Snapshot = {
   lyrics?: { original: string; translation: string; romanization: string; wordTimed: string };
   settings: { renderer: string; background: string; showTranslation: boolean; showRomanization: boolean; lyricOffset: number; fontSize: number; themeColors?: string[]; visualizerTunings?: Record<string, Record<string, unknown>> };
   daylight: boolean; reduceMotion: boolean;
+  audioPower?: number; audioBands?: number[];
 };
 
 function LyricsSurface() {
   const [state, setState] = useState<Snapshot | null>(null);
   const clock = useRef<{ snapshot: Snapshot; receivedAt: number } | null>(null);
   const [lineIndex, setLineIndex] = useState(-1);
+  const [documentVisible, setDocumentVisible] = useState(!document.hidden);
   const currentTime = useMotionValue(0);
   const zero = useMotionValue(0);
-  const audioBands = useMemo(() => ({ bass: zero, lowMid: zero, mid: zero, vocal: zero, treble: zero }), [zero]);
+  const bass = useMotionValue(0), lowMid = useMotionValue(0), mid = useMotionValue(0), vocal = useMotionValue(0), treble = useMotionValue(0);
+  const audioBands = useMemo(() => ({ bass, lowMid, mid, vocal, treble }), [bass, lowMid, mid, vocal, treble]);
   const lines = useMemo(() => {
     try { return parseNativeLyrics(state?.lyrics); }
     catch { native()?.postMessage({ type: 'error', message: 'Lyrics parsing failed' }); return []; }
@@ -43,9 +46,35 @@ function LyricsSurface() {
   const latestLines = useRef(lines);
   latestLines.current = lines;
   useEffect(() => {
+    const update = () => setDocumentVisible(!document.hidden);
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+  useEffect(() => {
     if (!state) return;
-    const frame = requestAnimationFrame(() => native()?.postMessage({ type: 'rendered', version: 1 }));
-    return () => cancelAnimationFrame(frame);
+    const started = performance.now();
+    let timer: ReturnType<typeof setTimeout>;
+    const confirm = () => {
+      const width = window.innerWidth, height = window.innerHeight;
+      const visibleText = [...document.querySelectorAll('#root span')].some(element => {
+        const rect = element.getBoundingClientRect();
+        if (!element.textContent?.trim() || rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.top > height || rect.right < 0 || rect.left > width) return false;
+        let parent: Element | null = element;
+        while (parent) {
+          const style = getComputedStyle(parent);
+          if (Number(style.opacity) < 0.05 || style.visibility === 'hidden' || style.display === 'none') return false;
+          parent = parent.parentElement;
+        }
+        return true;
+      });
+      const canvas = document.querySelector('#root canvas')?.getBoundingClientRect();
+      if (performance.now() - started >= 1200 && width > 0 && height > 0 && (visibleText || (canvas && canvas.width > 0 && canvas.height > 0))) {
+        native()?.postMessage({ type: 'rendered', version: 1 });
+      } else if (performance.now() - started < 8000) timer = setTimeout(confirm, 150);
+      else native()?.postMessage({ type: 'error', message: `Lyrics did not produce a visible frame (${width}x${height}; lines=${latestLines.current.length})` });
+    };
+    timer = setTimeout(confirm, 150);
+    return () => clearTimeout(timer);
   }, [state?.generation, state?.settings.renderer]);
 
   useEffect(() => {
@@ -53,6 +82,12 @@ function LyricsSurface() {
       const accepted = acceptSnapshot(clock.current?.snapshot, next) as Snapshot | null;
       if (!accepted) return;
       clock.current = { snapshot: accepted, receivedAt: performance.now() };
+      const power = Number.isFinite(accepted.audioPower) ? Number(accepted.audioPower) : 0;
+      zero.set(Math.max(0, Math.min(1, power)));
+      [bass, lowMid, mid, vocal, treble].forEach((band, i) => {
+        const value = accepted.audioBands?.[i];
+        band.set(typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0);
+      });
       const time = Math.max(0, accepted.time + (accepted.settings.lyricOffset || 0));
       currentTime.set(time);
       let index = -1;
@@ -63,17 +98,17 @@ function LyricsSurface() {
       setLineIndex(previous => previous === index ? previous : index);
       // Time-only snapshots do not rerender React; renderer time travels through MotionValue.
       setState(previous => {
-        const { time: _t, sequence: _s, ...content } = accepted;
-        const { time: _pt, sequence: _ps, ...oldContent } = previous ?? {} as Snapshot;
+        const { time: _t, sequence: _s, audioPower: _a, audioBands: _b, ...content } = accepted;
+        const { time: _pt, sequence: _ps, audioPower: _pa, audioBands: _pb, ...oldContent } = previous ?? {} as Snapshot;
         return JSON.stringify(content) === JSON.stringify(oldContent) ? previous : accepted;
       });
     };
     native()?.postMessage({ type: 'ready', version: 1 });
     return () => { delete (window as any).foliaReceive; };
-  }, [currentTime]);
+  }, [currentTime, zero, bass, lowMid, mid, vocal, treble]);
 
   useEffect(() => {
-    if (!state?.visible || document.hidden) return;
+    if (!state?.visible || !documentVisible) return;
     let frame = 0;
     let previousIndex = -2;
     const tick = () => {
@@ -91,13 +126,16 @@ function LyricsSurface() {
     };
     tick();
     return () => cancelAnimationFrame(frame);
-  }, [state?.visible, state?.playing, state?.generation, state?.settings.lyricOffset, lines, currentTime]);
+  }, [state?.visible, state?.playing, state?.generation, state?.settings.lyricOffset, documentVisible, lines, currentTime]);
 
   if (!state) return <div className="empty">Folia</div>;
   const baseTheme = state.daylight ? DAYLIGHT_THEME : DEFAULT_THEME;
   const colors = state.settings.themeColors;
   const theme = colors?.length === 4 && colors.every(c => /^#[0-9a-f]{6}$/i.test(c))
     ? { ...baseTheme, backgroundColor: colors[0], primaryColor: colors[1], accentColor: colors[2], secondaryColor: colors[3] } : baseTheme;
+  if (!lines.length) return <div className="plain-lyrics" style={{ color: theme.primaryColor, background: theme.backgroundColor }}>
+    {state.lyrics?.original || '暂无歌词 / No lyrics'}
+  </div>;
   return <VisualizerRenderer
     mode={hasVisualizerMode(state.settings.renderer) ? state.settings.renderer : 'classic'}
     currentTime={currentTime} currentLineIndex={lineIndex} lines={lines}

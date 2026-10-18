@@ -106,7 +106,6 @@ actor OmniService {
         if collection.provider == .bodian { try await bodian.changePlaylist(collection, track: track, add: add); return }
         if collection.provider == .qq { try await qq.changePlaylist(collection, track: track, add: add); return }
         if collection.provider == .navidrome { try await navidrome.changePlaylist(collection, track: track, add: add); return }
-        guard collection.provider == track.provider else { throw MusicError.unsupported("歌曲与歌单必须来自同一音乐平台。") }
         try requireNetease(track.provider)
         guard await netease.account() != nil else { throw MusicError.authenticationRequired }
         let ids = try JSONSerialization.data(withJSONObject: [track.mediaID])
@@ -124,7 +123,7 @@ actor OmniService {
         return ((result["data"] as? [String: Any])?["dailySongs"] as? [[String: Any]] ?? []).compactMap(Self.normalizeNetease)
     }
     func requireNetease(_ provider: MusicProvider) throws {
-        guard provider == .netease else { throw MusicError.unsupported("\(provider.title) 的设备端授权及播放协议尚未完成，不能使用托管 API 代替。") }
+        guard provider == .netease else { throw MusicError.unsupported("\(provider.title) 不支持当前所选操作。") }
     }
     static func identifier(_ value: Any?) -> String? {
         if let value = value as? String { return value }
@@ -144,6 +143,8 @@ actor OmniService {
         (result[field] as? [String: Any])?["lyric"] as? String ?? ""
     }
 }
+
+
 
 
 

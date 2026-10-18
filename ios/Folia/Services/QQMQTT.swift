@@ -88,13 +88,13 @@ actor QQSocket {
             let socket = network.webSocketTask(with: url, protocols: ["mqtt"])
             task = socket; buffer = Data(); socket.resume()
             try await socket.send(.data(QQMQTT.connect(key)))
-            let packet = try await nextPacket()
+            let packet = try await nextPacket(timeout: 20)
             var cursor = QQMQTT.Cursor(bytes: Array(packet)); _ = try cursor.byte(); _ = try cursor.integer(); _ = try cursor.byte()
             let reason = try cursor.byte(), props = try cursor.properties()
             if reason == 0 {
                 try await socket.send(.data(QQMQTT.subscribe(key)))
                 while true {
-                    let acknowledgement = try await nextPacket()
+                    let acknowledgement = try await nextPacket(timeout: 20)
                     if acknowledgement.first.map({ $0 >> 4 }) == 9 {
                         guard let code = acknowledgement.last, code < 0x80 else { throw MusicError.invalidResponse }
                         return
@@ -111,7 +111,7 @@ actor QQSocket {
             path = "/" + parts.joined(separator: "/")
         }
     }
-    func nextPacket() async throws -> Data {
+    func nextPacket(timeout: UInt64 = 210) async throws -> Data {
         while true {
             if buffer.count > 1 {
                 var cursor = QQMQTT.Cursor(bytes: Array(buffer), index: 1)
@@ -120,9 +120,27 @@ actor QQSocket {
                 }
             }
             guard let task else { throw CancellationError() }
-            let message = try await task.receive()
+            let message = try await Self.receive(task, timeout: timeout)
             switch message { case .data(let data): buffer += data; case .string(let text): buffer += Data(text.utf8); @unknown default: throw MusicError.invalidResponse }
             guard buffer.count <= 1048576 else { throw MusicError.invalidResponse }
+        }
+    }
+    // Bound broker handshakes; the timeout also closes the socket to release a pending receive.
+    private nonisolated static func receive(_ socket: URLSessionWebSocketTask, timeout: UInt64) async throws -> URLSessionWebSocketTask.Message {
+        try await withTaskCancellationHandler {
+            try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in
+                group.addTask { try await socket.receive() }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: timeout * 1_000_000_000)
+                    socket.cancel(with: .goingAway, reason: nil)
+                    throw MusicError.unavailable("QQ 扫码消息服务响应超时，请重新生成二维码。")
+                }
+                defer { group.cancelAll() }
+                guard let message = try await group.next() else { throw CancellationError() }
+                return message
+            }
+        } onCancel: {
+            socket.cancel(with: .goingAway, reason: nil)
         }
     }
     func nextEvent() async throws -> (String, [String: Any]) {
@@ -141,3 +159,6 @@ actor QQSocket {
     }
     func ping() async throws { try await task?.send(.data(Data([0xc0, 0]))) }
 }
+
+
+

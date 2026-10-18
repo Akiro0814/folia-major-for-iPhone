@@ -85,7 +85,7 @@ final class BodianGETBodyHTTP: @unchecked Sendable {
             guard let colon = line.firstIndex(of: ":") else { continue }
             fields[String(line[..<colon]).lowercased()] = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
         }
-        guard fields["content-encoding"] == nil || fields["content-encoding"] == "identity" else { throw MusicError.unavailable("波点播放接口返回了不支持的压缩格式。") }
+        guard fields["content-encoding"] == nil || fields["content-encoding"]?.lowercased() == "identity" else { throw MusicError.unavailable("波点播放接口返回了不支持的压缩格式。") }
         let body = Data(bytes[split.upperBound...])
         if fields["transfer-encoding"]?.lowercased().contains("chunked") == true {
             var cursor = 0; var decoded = Data()

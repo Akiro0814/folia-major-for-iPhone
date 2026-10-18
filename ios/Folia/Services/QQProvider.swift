@@ -41,6 +41,10 @@ actor QQProvider {
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("QQMusic 14090008(android 10)", forHTTPHeaderField: "User-Agent")
+        if !auth, overrides["tmeAppID"] as? String == "qqmusiclight" {
+            request.setValue("tmeLoginType=-1", forHTTPHeaderField: "Cookie")
+            request.setValue("okhttp/3.14.9", forHTTPHeaderField: "User-Agent")
+        }
         if let key = credentials["musickey"] {
             let id = credentials["str_musicid"] ?? credentials["musicid"] ?? "0"
             request.setValue("uin=\(id); qqmusic_uin=\(id); qm_keyst=\(key); qqmusic_key=\(key)", forHTTPHeaderField: "Cookie")
@@ -79,12 +83,14 @@ actor QQProvider {
     func startWechatQR() async throws -> QRLogin {
         cancelQR()
         generation += 1
+        let captured = generation
         try await bootstrap()
         var url = URLComponents(string: "https://open.weixin.qq.com/connect/qrconnect")!
         url.queryItems = ["appid": "wx48db31d50e334801", "redirect_uri": "https://y.qq.com/portal/wx_redirect.html?login_type=2&surl=https://y.qq.com/",
             "response_type": "code", "scope": "snsapi_login", "state": "STATE", "href": "https://y.qq.com/mediastyle/music_v17/src/css/popup_wechat.css#wechat_redirect"]
             .map { URLQueryItem(name: $0.key, value: $0.value) }
         let page = try await text(URLRequest(url: url.url!))
+        guard captured == generation else { throw MusicError.sessionChanged }
         guard let match = page.range(of: "uuid=([^\"]+)\"", options: .regularExpression) else { throw MusicError.invalidResponse }
         let uuid = String(page[match]).dropFirst(5).dropLast()
         let key = String(uuid)
@@ -93,6 +99,7 @@ actor QQProvider {
         return QRLogin(key: key, url: confirm, imageURL: image)
     }
     func pollWechatQR(_ login: QRLogin) async throws -> QRLoginStatus {
+        let captured = generation
         var url = URLComponents(string: "https://lp.open.weixin.qq.com/connect/l/qrconnect")!
         url.queryItems = [URLQueryItem(name: "uuid", value: login.key), URLQueryItem(name: "_", value: String(Int64(Date().timeIntervalSince1970 * 1000)))]
         var request = URLRequest(url: url.url!)
@@ -101,6 +108,7 @@ actor QQProvider {
         let content: String
         do { content = try await text(request) }
         catch let error as URLError where error.code == .timedOut { return .waiting }
+        guard captured == generation else { throw MusicError.sessionChanged }
         let pattern = "window\\.wx_errcode=(\\d+);window\\.wx_code='([^']*)'"
         let regex = try NSRegularExpression(pattern: pattern)
         guard let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)),
@@ -111,11 +119,14 @@ actor QQProvider {
         case 402, 403: return .expired
         case 405:
             let result = try await call("music.login.LoginServer", "Login", ["code": String(content[codeRange]), "strAppid": "wx48db31d50e334801"], auth: false, overrides: ["tmeLoginType": 1])
+            guard captured == generation else { throw MusicError.sessionChanged }
             return .authorized(try await establish(result, type: 1))
         default: throw MusicError.server(Int(content[statusRange]) ?? -1, "微信返回了未知扫码状态")
         }
     }
     func establish(_ result: [String: Any], type: Int) async throws -> MusicAccount {
+        let captured = generation
+        let previous = session
         guard let key = result["musickey"] as? String,
               let id = OmniService.identifier(result["str_musicid"]) ?? OmniService.identifier(result["musicid"]), id != "0" else { throw MusicError.authenticationRequired }
         let account = MusicAccount(id: id, provider: .qq, nickname: result["nick"] as? String ?? result["nickname"] as? String ?? "QQ 音乐用户",
@@ -128,7 +139,10 @@ actor QQProvider {
             _ = try await call("music.UserInfo.userInfoServer", "GetLoginUserInfo", [:])
             try persist()
             return account
-        } catch { session = ProviderSession(); throw error }
+        } catch {
+            if captured == generation { session = previous }
+            throw error
+        }
     }
     func json(_ request: URLRequest) async throws -> [String: Any] {
         let (data, response) = try await network.data(for: request)
@@ -149,4 +163,6 @@ actor QQProvider {
         return [:]
     }
 }
+
+
 

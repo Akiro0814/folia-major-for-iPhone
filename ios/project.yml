@@ -45,6 +45,8 @@ targets:
         INFOPLIST_FILE: Folia/Info.plist
     dependencies:
       - sdk: AVFoundation.framework
+      - sdk: MediaToolbox.framework
+      - sdk: Accelerate.framework
       - sdk: MediaPlayer.framework
       - sdk: WebKit.framework
       - sdk: Security.framework
@@ -83,3 +85,4 @@ schemes:
       config: Debug
     archive:
       config: Release
+

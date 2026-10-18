@@ -18,8 +18,10 @@ actor NavidromeProvider {
     private var configuration: NavidromeConfiguration?
     private var generation = UUID()
 
-    init(session: URLSession = .shared) {
-        self.session = session
+    init(session: URLSession? = nil) {
+        let network = URLSessionConfiguration.ephemeral
+        network.httpShouldSetCookies = false; network.urlCache = nil
+        self.session = session ?? URLSession(configuration: network)
         if let stored = try? SessionVault().read(.navidrome), let json = stored.cookies["configuration"], let data = json.data(using: .utf8) {
             configuration = try? JSONDecoder().decode(NavidromeConfiguration.self, from: data)
         }
@@ -117,6 +119,7 @@ actor NavidromeProvider {
         _ = try await request(liked ? "star" : "unstar", parameters: [.init(name: "id", value: track.mediaID)])
     }
     func changePlaylist(_ collection: MusicCollection, track: Track, add: Bool) async throws {
+        let revision = generation
         guard track.provider == .navidrome, collection.provider == .navidrome else { throw MusicError.invalidResponse }
         let config = try requireConfiguration()
         try Self.requireNamespace(track.providerData, configuration: config)
@@ -133,6 +136,7 @@ actor NavidromeProvider {
             }
             guard parameters.count > 1 else { return }
         }
+        guard revision == generation else { throw MusicError.sessionChanged }
         _ = try await request("updatePlaylist", parameters: parameters)
     }
     func createPlaylist(name: String) async throws -> MusicCollection {
@@ -147,6 +151,7 @@ actor NavidromeProvider {
         _ = try await request("deletePlaylist", parameters: [.init(name: "id", value: collection.id)])
     }
     func lyrics(for track: Track) async throws -> LyricsPayload {
+        let revision = generation
         guard track.provider == .navidrome else { throw MusicError.invalidResponse }
         try Self.requireNamespace(track.providerData, configuration: requireConfiguration())
         do {
@@ -156,6 +161,7 @@ actor NavidromeProvider {
                 return LyricsPayload(original: Self.lyricText(lyric))
             }
         } catch MusicError.server(let code, _) where [0, 20, 30, 70].contains(code) { /* Older Subsonic servers expose only getLyrics. */ }
+        guard revision == generation else { throw MusicError.sessionChanged }
         let root = try await request("getLyrics", parameters: [.init(name: "artist", value: track.artist), .init(name: "title", value: track.title)])
         return LyricsPayload(original: (root["lyrics"] as? [String: Any])?["value"] as? String ?? "")
     }
@@ -177,7 +183,7 @@ actor NavidromeProvider {
         let config = try override ?? requireConfiguration()
         let revision = generation
         let url = try Self.url(configuration: config, endpoint: endpoint, parameters: parameters)
-        var request = URLRequest(url: url); request.timeoutInterval = 30
+        var request = URLRequest(url: url); request.timeoutInterval = 30; request.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, response) = try await session.data(for: request)
         try Task.checkCancellation()
         guard revision == generation else { throw MusicError.sessionChanged }
@@ -230,8 +236,23 @@ actor NavidromeProvider {
             return MusicCollection(id: prefix + id, provider: .navidrome, title: item["name"] as? String ?? "", artworkURL: try artwork(item, configuration: configuration), trackCount: item["songCount"] as? Int ?? 0, providerData: ["serverNamespace": try Self.serverNamespace(configuration)])
         }
     }
+    /// Persist a nonsecret cover identity; authenticated transport URLs are created only at display time.
+    static func artworkReference(id: String, configuration: NavidromeConfiguration) throws -> URL {
+        var parts = URLComponents(); parts.scheme = "folia-navidrome"; parts.host = "cover"
+        parts.queryItems = [.init(name: "id", value: id), .init(name: "serverNamespace", value: try serverNamespace(configuration))]
+        guard let reference = parts.url else { throw MusicError.invalidResponse }; return reference
+    }
+    func resolveArtwork(reference: URL) throws -> URL {
+        let config = try requireConfiguration()
+        guard let parts = URLComponents(url: reference, resolvingAgainstBaseURL: false), parts.scheme == "folia-navidrome", parts.host == "cover",
+              let items = parts.queryItems, items.count == 2,
+              let id = items.first(where: { $0.name == "id" })?.value, !id.isEmpty,
+              let namespace = items.first(where: { $0.name == "serverNamespace" })?.value else { throw MusicError.invalidResponse }
+        try Self.requireNamespace(["serverNamespace": namespace], configuration: config)
+        return try Self.url(configuration: config, endpoint: "getCoverArt", parameters: [.init(name: "id", value: id), .init(name: "size", value: "600")])
+    }
     private func artwork(_ item: [String: Any], configuration: NavidromeConfiguration) throws -> URL? {
         guard let id = item["coverArt"] as? String else { return nil }
-        return try Self.url(configuration: configuration, endpoint: "getCoverArt", parameters: [.init(name: "id", value: id), .init(name: "size", value: "600")])
+        return try Self.artworkReference(id: id, configuration: configuration)
     }
 }

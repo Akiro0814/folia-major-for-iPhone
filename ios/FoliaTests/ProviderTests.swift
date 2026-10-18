@@ -15,6 +15,16 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(song?.duration, 180)
         XCTAssertEqual(song?.providerData["mixsongID"], "123")
     }
+    func testKuGouObservedAlbumNestedAudioShape() {
+        let item: [String: Any] = ["audio_info": ["hash": "abc", "duration": 271151],
+            "base": ["album_id": 960399, "author_name": "Artist", "audio_name": "Title", "album_audio_id": 32042818],
+            "album_info": ["album_name": "Album", "cover": "https://example.com/{size}/cover.jpg"]]
+        let track = PublicDiscoveryTransport.normalizeKugou(item)
+        XCTAssertEqual(track?.title, "Title")
+        XCTAssertEqual(track?.album, "Album")
+        XCTAssertEqual(track?.duration ?? 0, 271.151, accuracy: 0.001)
+        XCTAssertEqual(track?.providerData["mixsongID"], "32042818")
+    }
     func testMD5MatchesPinnedProtocol() {
         XCTAssertEqual(ProtocolCrypto.md5("password"), "5f4dcc3b5aa765d61d8327deb882cf99")
     }
@@ -27,6 +37,7 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(methods, [.qr])
     }
 }
+
 
 
 

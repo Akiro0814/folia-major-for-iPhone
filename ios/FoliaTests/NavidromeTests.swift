@@ -44,4 +44,14 @@ final class NavidromeTests: XCTestCase {
         XCTAssertNoThrow(try NavidromeProvider.requireNamespace(["serverNamespace": namespace], configuration: same))
         XCTAssertThrowsError(try NavidromeProvider.requireNamespace(["serverNamespace": namespace], configuration: other))
         XCTAssertThrowsError(try NavidromeProvider.requireNamespace([:], configuration: first))
-    }}
+    }
+    func testPersistedArtworkReferenceContainsNoReplayableAuthentication() throws {
+        let config = NavidromeConfiguration(serverURL: "https://music.example.test", username: "private-user", password: "private-password")
+        let reference = try NavidromeProvider.artworkReference(id: "cover:123", configuration: config)
+        XCTAssertEqual(reference.scheme, "folia-navidrome")
+        XCTAssertFalse(reference.absoluteString.contains("private-user"))
+        XCTAssertFalse(reference.absoluteString.contains("private-password"))
+        let parts = try XCTUnwrap(URLComponents(url: reference, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(Set((parts.queryItems ?? []).map(\.name)), ["id", "serverNamespace"])
+    }
+}

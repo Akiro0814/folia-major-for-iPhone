@@ -5,13 +5,13 @@ extension QQProvider {
     func searchCatalog(_ query: String, kind: CatalogKind) async throws -> [MusicCollection] {
         let result = try await call("music.search.SearchCgiService", "DoSearchForQQMusicLite", ["search_id": String(UInt64.random(in: 100000000000000000...999999999999999999)),
             "remoteplace": "search.android.keyboard", "query": query, "search_type": kind == .album ? 2 : 1, "num_per_page": 20, "page_num": 1,
-            "highlight": 0, "nqc_flag": 0, "page_id": 1, "grp": 1], auth: session.account != nil)
+            "highlight": 0, "nqc_flag": 0, "page_id": 1, "grp": 1], auth: session.account != nil, overrides: session.account == nil ? ["ct": 11, "cv": "1003006", "v": "1003006", "tmeAppID": "qqmusiclight", "nettype": "NETWORK_WIFI", "udid": "0", "uid": "0"] : [:])
         if let code = result["code"] as? Int, code != 0 { throw MusicError.server(code, "QQ 音乐搜索失败") }
         let key = kind == .album ? "item_album" : "singer"
         let items = Self.dictionary(result["body"])[key] as? [[String: Any]] ?? []
         return items.compactMap { item in
-            guard let id = item["mid"] as? String ?? item["albumMID"] as? String ?? item["singerMID"] as? String else { return nil }
-            let title = item["name"] as? String ?? item["albumName"] as? String ?? item["singerName"] as? String ?? ""
+            guard let id = item["mid"] as? String ?? item["albumMID"] as? String ?? item["albummid"] as? String ?? item["singerMID"] as? String ?? item["singermid"] as? String else { return nil }
+            let title = item["name"] as? String ?? item["albumName"] as? String ?? item["albumname"] as? String ?? item["singerName"] as? String ?? item["singername"] as? String ?? ""
             let code = kind == .album ? "T002" : "T001"
             return MusicCollection(id: id, provider: .qq, title: title,
                 artworkURL: URL(string: "https://y.gtimg.cn/music/photo_new/\(code)R500x500M000\(id).jpg"), providerData: ["kind": kind.rawValue])
@@ -41,3 +41,4 @@ extension QQProvider {
         return tracks
     }
 }
+

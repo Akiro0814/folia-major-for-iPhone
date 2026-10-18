@@ -26,7 +26,7 @@ try {
       settings: { renderer: mode, background: 'common', showTranslation: true, showRomanization: false, lyricOffset: 0, fontSize: 36 },
       daylight: false, reduceMotion: true,
     }), { mode: entry.mode, i });
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(1200);
     const failures = await page.evaluate(() => window.foliaMessages.filter(x => x.type === 'error'));
     assert.equal(failures.length, 0, `${entry.mode}: ${JSON.stringify(failures)}`);
     assert.ok((await page.locator('#root').innerHTML()).length > 100, `${entry.mode}: empty renderer`);
