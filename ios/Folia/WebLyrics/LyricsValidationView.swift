@@ -5,6 +5,7 @@ import SwiftUI
 struct LyricsValidationView: View {
     @State private var ready = false
     @State private var failed = false
+    @State private var diagnostics = ""
     private let track = Track(mediaID: "offline-lyrics-validation", provider: .netease,
                               title: "Folia lyric rendering", artist: "Offline validation", duration: 30)
     private let lyrics = LyricsPayload(original: "[00:00.00]Folia\n[00:02.00]Music becomes words\n[00:06.00]流动的文字与旋律\n[00:12.00]A native iPhone experience",
@@ -27,11 +28,12 @@ struct LyricsValidationView: View {
                         ProgressView().accessibilityIdentifier("lyrics.validation.loading")
                     }
                 }.font(.caption).padding()
+                if !diagnostics.isEmpty { Text(diagnostics).font(.caption2).accessibilityIdentifier("lyrics.validation.diagnostics") }
                 FoliaLyricsView(track: track, lyrics: lyrics, currentTime: 3, isPlaying: false,
                                 settings: VisualSettings(), onReadiness: { value in
                     if value { ready = true; failed = false }
                     else { ready = false; failed = true }
-                })
+                }, onDiagnostics: { diagnostics = $0 })
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .background(Color(.systemBackground))

@@ -52,7 +52,7 @@ struct SettingsView: View {
             Section(localized("关于", "About")) {
                 LabeledContent("Folia", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
                 Link(localized("原项目与许可证", "Original project & license"), destination: URL(string: "https://github.com/chthollyphile/folia-major")!)
-                Link(localized("iPhone 项目", "iPhone project"), destination: URL(string: "https://github.com/L1angK1NG/folia-major-for-iPhone")!)
+                Link(localized("iPhone 项目", "iPhone project"), destination: URL(string: "https://github.com/Akiro0814/folia-major-for-iPhone")!)
                 Text(localized("支持 iOS 26 及以上。后台音频、AirPlay 与系统锁屏由原生播放器提供。", "Requires iOS 26 or later. Native audio provides background playback, AirPlay and Lock Screen controls.")).font(.footnote).foregroundStyle(.secondary)
             }
         }

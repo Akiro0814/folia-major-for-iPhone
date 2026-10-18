@@ -12,6 +12,7 @@ struct FoliaLyricsView: View {
     var audioBands: [Double] = [0, 0, 0, 0, 0]
     var onSeek: ((Double) -> Void)? = nil
     var onReadiness: ((Bool) -> Void)? = nil
+    var onDiagnostics: ((String) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -25,7 +26,7 @@ struct FoliaLyricsView: View {
             LyricsWebSurface(track: track, lyrics: lyrics, currentTime: currentTime, isPlaying: isPlaying,
                 settings: scaledSettings, daylight: colorScheme == .light, reduceMotion: reduceMotion,
                 visible: scenePhase == .active, artwork: resolvedArtwork, audioPower: audioPower, audioBands: audioBands,
-                onSeek: onSeek, onReadiness: onReadiness, failure: $failure)
+                onSeek: onSeek, onReadiness: onReadiness, onDiagnostics: onDiagnostics, failure: $failure)
                 .accessibilityHidden(true)
             if failure != nil {
                 ScrollView {
@@ -74,6 +75,7 @@ private struct LyricsWebSurface: UIViewRepresentable {
     var audioBands: [Double]
     var onSeek: ((Double) -> Void)?
     var onReadiness: ((Bool) -> Void)?
+    var onDiagnostics: ((String) -> Void)?
     @Binding var failure: String?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -149,7 +151,9 @@ private struct LyricsWebSurface: UIViewRepresentable {
             switch type {
             case "ready": ready = true; parent.failure = nil; sendSnapshot()
             case "rendered": parent.onReadiness?(true)
-            case "error": parent.failure = body["message"] as? String ?? "Lyrics unavailable"; parent.onReadiness?(false)
+            case "error":
+                let message = body["message"] as? String ?? "Lyrics unavailable"
+                parent.failure = message; parent.onReadiness?(false); parent.onDiagnostics?(message)
             case "seek":
                 if let time = body["time"] as? Double, time.isFinite, time >= 0 { parent.onSeek?(time) }
             default: break

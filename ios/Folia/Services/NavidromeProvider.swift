@@ -38,6 +38,7 @@ actor NavidromeProvider {
         _ = try await request("ping", configuration: candidate)
         guard generation == requestGeneration else { throw MusicError.sessionChanged }
         let encoded = try JSONEncoder().encode(candidate)
+        try Task.checkCancellation()
         try vault.write(ProviderSession(account: MusicAccount(id: username, provider: .navidrome, nickname: username), cookies: ["configuration": String(decoding: encoded, as: UTF8.self)]), provider: .navidrome)
         configuration = candidate; generation = UUID()
     }

@@ -35,7 +35,7 @@ struct LoginView: View {
                     Button(localized("退出登录", "Sign out"), role: .destructive) { perform { try await playback.service.logout(provider: provider); try Task.checkCancellation(); self.account = nil } }
                 }
             } else if methods.isEmpty {
-                Section { Text(localized("此平台的设备直连登录协议暂未就绪。不会将其他应用的微信身份冒充本平台授权。", "Direct device sign-in is not available for this provider yet.")) }
+                Section { Text(localized("此平台暂不支持登录，请稍后重试。", "Sign-in is currently unavailable for this provider.")) }
             } else {
                 Picker(localized("登录方式", "Sign-in method"), selection: $method) {
                     ForEach(methods, id: \.self) { method in Text(methodTitle(method)).tag(method) }
@@ -49,8 +49,10 @@ struct LoginView: View {
                     }
                     Section {
                         if let qr { QRCodeView(url: qr.url, imageURL: qr.imageURL)
-                            ShareLink(item: qr.url) { Label(localized("打开或分享授权链接", "Open or share authorization"), systemImage: "qrcode") }
-                            Link(localized("在浏览器中授权", "Authorize in browser"), destination: qr.url)
+                            if ["https", "http"].contains(qr.url.scheme?.lowercased() ?? "") {
+                                ShareLink(item: qr.url) { Label(localized("分享授权链接", "Share authorization link"), systemImage: "qrcode") }
+                                Link(localized("在浏览器中授权", "Authorize in browser"), destination: qr.url)
+                            }
                         }
                         Button(localized("生成登录二维码", "Create sign-in QR")) { qrGeneration += 1 }
                     }

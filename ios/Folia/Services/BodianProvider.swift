@@ -33,9 +33,20 @@ actor BodianProvider {
     }
     func stream(for track: Track, quality: AudioQuality = .high) async throws -> AudioSource {
         guard track.provider == .bodian else { throw MusicError.invalidResponse }
-        let id = try Self.mediaID(track.mediaID), freeSign = track.providerData["freeSign"] ?? ""
-        guard freeSign.utf8.count <= 4096 else { throw MusicError.invalidResponse }
+        let id = try Self.mediaID(track.mediaID)
         let revision = generation
+        var freeSign = track.providerData["freeSign"] ?? ""
+        if track.providerData["freeSign"] == nil {
+            do {
+                let detail = try await data("/api/service/music/info", fields: [("musicId", track.mediaID)])
+                freeSign = detail["freeSign"] as? String ?? detail["fsig"] as? String ?? ""
+            } catch is CancellationError { throw CancellationError() }
+            catch MusicError.sessionChanged { throw MusicError.sessionChanged }
+            catch MusicError.authenticationRequired { throw MusicError.authenticationRequired }
+            catch { /* The actual rights endpoint remains authoritative when detail refresh is unavailable. */ }
+            guard revision == generation else { throw MusicError.sessionChanged }
+        }
+        guard freeSign.utf8.count <= 4096 else { throw MusicError.invalidResponse }
         let rights = try await data("/api/play/music/v2/checkRight", fields: [("musicId", track.mediaID), ("freeSign", freeSign)],
                                    body: ["musicId": id, "freeSign": freeSign], signed: true)
         try Self.validateRights(rights)

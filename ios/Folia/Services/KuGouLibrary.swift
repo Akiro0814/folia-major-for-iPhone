@@ -101,6 +101,12 @@ extension PublicDiscoveryTransport {
         func text(_ values: [String: Any], _ keys: [String]) -> String? {
             keys.lazy.compactMap { values[$0] as? String }.first
         }
+        func number(_ value: Any?) -> Double? {
+            if let value = value as? Double { return value }
+            if let value = value as? Int { return Double(value) }
+            if let value = value as? NSNumber { return value.doubleValue }
+            return nil
+        }
         guard let hash = text(item, ["hash", "FileHash"]) ?? text(audio, ["hash"]) else { return nil }
         let title = text(item, ["songname", "SongName", "OriSongName", "filename", "name"]) ?? text(base, ["audio_name"]) ?? "歌曲"
         let artist = text(item, ["singername", "SingerName"]) ?? text(base, ["author_name"]) ?? ""
@@ -109,14 +115,10 @@ extension PublicDiscoveryTransport {
         metadata["fileID"] = OmniService.identifier(item["fileid"] ?? item["FileID"])
         metadata["albumID"] = OmniService.identifier(item["album_id"] ?? item["AlbumID"] ?? base["album_id"])
         metadata["mixsongID"] = OmniService.identifier(item["mixsongid"] ?? item["MixSongID"] ?? base["album_audio_id"])
-        let durationSeconds = item["duration"] as? Double ?? item["Duration"] as? Double
-        let milliseconds = audio["duration"] as? Double ?? item["timelen"] as? Double ?? 0
+        let durationSeconds = number(item["duration"]) ?? number(item["Duration"])
+        let milliseconds = number(audio["duration"]) ?? number(item["timelen"]) ?? 0
         return Track(mediaID: hash, provider: .kugou, title: title, artist: artist,
             album: text(item, ["album_name", "AlbumName"]) ?? text(album, ["album_name"]) ?? "", artworkURL: image.flatMap(URL.init(string:)),
             duration: durationSeconds ?? milliseconds / 1000, providerData: metadata)
     }
 }
-
-
-
-

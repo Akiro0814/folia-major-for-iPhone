@@ -25,6 +25,13 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(track?.duration ?? 0, 271.151, accuracy: 0.001)
         XCTAssertEqual(track?.providerData["mixsongID"], "32042818")
     }
+    func testKuGouJSONNumbersAndFractionalDuration() throws {
+        let json = Data(#"{"FileHash":"abc","Duration":180,"OriSongName":"Title"}"#.utf8)
+        let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
+        XCTAssertEqual(PublicDiscoveryTransport.normalizeKugou(decoded)?.duration, 180)
+        let fractional: [String: Any] = ["hash": "abc", "duration": 180.5]
+        XCTAssertEqual(PublicDiscoveryTransport.normalizeKugou(fractional)?.duration, 180.5)
+    }
     func testMD5MatchesPinnedProtocol() {
         XCTAssertEqual(ProtocolCrypto.md5("password"), "5f4dcc3b5aa765d61d8327deb882cf99")
     }
@@ -37,7 +44,3 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(methods, [.qr])
     }
 }
-
-
-
-
